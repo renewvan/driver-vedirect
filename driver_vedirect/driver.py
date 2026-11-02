@@ -40,22 +40,37 @@ class Driver:
         self._publisher = publisher
         self._config = config
         self._clock = clock
-        self._parser = FrameParser()
+        self._parsers: dict[str, FrameParser] = {}
         self._identified: set[str] = set()
         self._warned_pids: set[str] = set()
         self._reported_bad = 0
+        self._closed_bad = 0
         self._last_bad_report = float("-inf")
 
-    def poll(self, port) -> None:  # noqa: ANN001 - any object with read(size) -> bytes
-        """Read one chunk from the port and publish whatever complete blocks it finishes."""
-        for fields in self._parser.feed(port.read(4096)):
+    def poll(self, port, key: str = "") -> bool:  # noqa: ANN001 - any object with read(size)
+        """Read one chunk from the port and publish whatever complete blocks it finishes.
+
+        `key` names the port (its by-id path) so each keeps its own half-read frame. Returns
+        True when the port delivered any bytes. A failing read raises OSError to the caller.
+        """
+        parser = self._parsers.setdefault(key, FrameParser())
+        data = port.read(4096)
+        for fields in parser.feed(data):
             self._handle(fields)
         self._report_bad_frames()
+        return bool(data)
+
+    def forget_port(self, key: str) -> None:
+        """Drop a port's partial frame (it was closed); counters stay in the totals."""
+        parser = self._parsers.pop(key, None)
+        if parser is not None:
+            self._closed_bad += parser.bad_frames
 
     def _report_bad_frames(self) -> None:
         """Rate-limited (once per minute) warning for blocks dropped on a bad checksum."""
         now = self._clock()
-        dropped = self._parser.bad_frames - self._reported_bad
+        total = self._closed_bad + sum(p.bad_frames for p in self._parsers.values())
+        dropped = total - self._reported_bad
         if dropped and now - self._last_bad_report >= BAD_FRAME_LOG_INTERVAL_S:
             logger.warning("Dropped %d VE.Direct block(s) with a bad checksum", dropped)
             self._reported_bad += dropped
@@ -86,18 +101,18 @@ class Driver:
 def run(config: AppConfig) -> None:
     import serial  # imported here so tests need no serial stack
 
+    from driver_vedirect.discovery import Supervisor, run_loop
+
     # Board serial is read once, here: Publisher republishes this same payload on every reconnect.
     info_payload = build_info_payload(env=os.environ, cpuinfo_path=Path("/proc/cpuinfo"))
     publisher = Publisher(config.mqtt, info_payload)
     publisher.connect()
-    # Read-only: the port is only ever read from. Port discovery and reconnects are a later ticket.
-    port = serial.Serial(config.device.port, config.device.baud, timeout=1)
-    driver = Driver(publisher, config)
+
+    def open_port(path: str, baud: int):  # read-only use; timeout=0 keeps reads non-blocking
+        return serial.Serial(path, baud, timeout=0)
+
+    supervisor = Supervisor(Driver(publisher, config), config, time.monotonic, open_port)
     try:
-        while True:
-            driver.poll(port)
-    except KeyboardInterrupt:
-        logger.info("Shutting down")
+        run_loop(supervisor)
     finally:
-        port.close()
         publisher.disconnect()

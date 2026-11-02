@@ -32,8 +32,10 @@ Frames with a bad checksum are dropped; HEX messages interleaved with text block
 
 ## Wiring
 
-One VE.Direct USB cable per device, 19200 8N1. Set `[device] port` (default `/dev/ttyUSB0`) in
-`config.ini`.
+VE.Direct USB cables, 19200 8N1. The Driver scans `[serial] by_id_dir` (`/dev/serial/by-id`) for
+names matching `port_globs` and identifies devices by what they report, never by port. A port that
+fails is retried after `backoff_min_s`, doubling to `backoff_max_s`. Details land in the README
+ticket (hub#133).
 
 ## Development
 
