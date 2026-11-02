@@ -43,6 +43,7 @@ class Driver:
         self._parser = FrameParser()
         self._identified: set[str] = set()
         self._warned_pids: set[str] = set()
+        self._last_err: dict[str, str] = {}
         self._reported_bad = 0
         self._last_bad_report = float("-inf")
 
@@ -70,14 +71,30 @@ class Driver:
                 logger.warning("Unknown VE.Direct PID %s with fields %s", pid, sorted(fields))
             return
         serial = fields.get("SER#", "").lower()
-        if not serial or device["entity"] != "solar":
+        entity = device["entity"]
+        if not serial or entity not in ("solar", "charger"):
             return  # other entities and serial-less devices arrive in later tickets
+        if entity == "charger":
+            self._log_err_change(serial, fields)
         if serial not in self._identified:
             self._identified.add(serial)
-            self._publish("solar", serial, "driver", DRIVER_KEY)
-            self._publish("solar", serial, "name", device["model"])
-        for prop, value in mapping.map_solar(fields).items():
-            self._publish("solar", serial, prop, value)
+            self._publish(entity, serial, "driver", DRIVER_KEY)
+            name = self._config.device_names.get(serial, device["model"])
+            self._publish(entity, serial, "name", name)
+            if "source" in device:
+                self._publish(entity, serial, "source", device["source"])
+        mapper = mapping.map_charger if entity == "charger" else mapping.map_solar
+        for prop, value in mapper(fields).items():
+            self._publish(entity, serial, prop, value)
+
+    def _log_err_change(self, serial: str, fields: dict[str, str]) -> None:
+        err = fields.get("ERR")
+        if err is None:
+            return
+        previous = self._last_err.get(serial, "0")  # a healthy first reading is not news
+        self._last_err[serial] = err
+        if err != previous:
+            logger.warning("Charger %s ERR changed %s -> %s", serial, previous, err)
 
     def _publish(self, entity: str, device_id: str, prop: str, value: object) -> None:
         self._publisher.publish(_topic(entity, device_id, prop), json.dumps(value))

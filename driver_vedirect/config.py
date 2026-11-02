@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import configparser
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,8 @@ class DeviceConfig:
 class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
+    # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
+    device_names: dict[str, str] = field(default_factory=dict)
 
 
 def load_config(
@@ -57,6 +59,12 @@ def load_config(
 
     mqtt = parser["mqtt"]
     device = parser["device"]
+
+    device_names = {
+        name[len("device.") :].lower(): section["name"]
+        for name, section in parser.items()
+        if name.startswith("device.") and section.get("name")
+    }
 
     return AppConfig(
         mqtt=MqttConfig(
@@ -74,4 +82,5 @@ def load_config(
             port=device.get("port", "/dev/ttyUSB0"),
             baud=device.getint("baud", 19200),
         ),
+        device_names=device_names,
     )
