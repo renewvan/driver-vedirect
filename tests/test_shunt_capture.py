@@ -180,3 +180,31 @@ def test_history_blocks_are_merged_per_port_and_dropped_with_the_port():
     driver.forget_port(BY_ID)
     driver.poll(NamedPort(no_power), key=BY_ID)
     assert "power_w" not in publisher.instance(BASE)
+
+
+def test_opening_mid_block_resyncs_without_a_dropped_block_warning(caplog):
+    import logging
+
+    publisher = FakePublisher()
+    driver = Driver(publisher, make_config(), clock=FakeClock())
+    whole = live()
+    stream = whole[len(whole) // 2 :] + live() + live(P="13")  # opened mid-block
+
+    with caplog.at_level(logging.WARNING):
+        driver.poll(NamedPort(stream))
+
+    assert publisher.instance(BASE)["power_w"] == 13
+    assert not [r for r in caplog.records if "Dropped" in r.getMessage()]
+
+
+def test_a_corrupt_block_after_sync_is_still_reported(caplog):
+    import logging
+
+    driver = Driver(FakePublisher(), make_config(), clock=FakeClock())
+    bad = bytearray(live())
+    bad[-1] ^= 0xFF
+
+    with caplog.at_level(logging.WARNING):
+        driver.poll(NamedPort(live() + bytes(bad)))
+
+    assert [r for r in caplog.records if "Dropped 1" in r.getMessage()]

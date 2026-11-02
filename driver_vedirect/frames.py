@@ -20,6 +20,8 @@ class FrameParser:
         self._buf = bytearray()
         self._in_hex = False
         self._checksum_next = False
+        # Until the first block ends, the buffer may start mid-block (port just opened).
+        self._synced = False
         self.bad_frames = 0
 
     def feed(self, data: bytes) -> list[dict[str, str]]:
@@ -36,9 +38,10 @@ class FrameParser:
             if self._checksum_next:
                 self._checksum_next = False
                 block, self._buf = bytes(self._buf), bytearray()
+                synced, self._synced = self._synced, True
                 if sum(block) % 256 == 0:
                     frames.append(_parse_block(block))
-                else:
+                elif synced:
                     self.bad_frames += 1
                     logger.debug(
                         "Dropped VE.Direct block with bad checksum (%d so far)", self.bad_frames

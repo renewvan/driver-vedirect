@@ -47,7 +47,7 @@ class Driver:
         self._publisher = publisher
         self._config = config
         self._clock = clock
-        self._parsers: dict[str, FrameParser] = {}
+        self._parsers: dict[str | int, FrameParser] = {}
         self._identified: set[str] = set()
         # (entity, id) -> [last valid frame time, live properties currently published]
         self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
@@ -60,17 +60,17 @@ class Driver:
         self._closed_bad = 0
         self._last_bad_report = float("-inf")
 
-    def poll(self, port, key: str = "") -> bool:  # noqa: ANN001 - any object with read(size)
+    def poll(self, port, key: str | int = "") -> bool:  # noqa: ANN001 - any object with read(size)
         """Read one chunk from the port and publish whatever complete blocks it finishes.
 
         `key` names the port (its by-id path) so each keeps its own half-read frame. Returns
         True when the port delivered any bytes. A failing read raises OSError to the caller.
         """
-        key = key or getattr(port, "name", "")
+        key = key or getattr(port, "name", "") or id(port)  # never share a parser between ports
         parser = self._parsers.setdefault(key, FrameParser())
         data = port.read(4096)
         for fields in parser.feed(data):
-            self._handle(fields, key or id(port))
+            self._handle(fields, key)
         self._clear_stale()
         self._report_bad_frames()
         return bool(data)
@@ -84,7 +84,7 @@ class Driver:
         """Time-driven work that must run even when no port is open (staleness clearing)."""
         self._clear_stale()
 
-    def forget_port(self, key: str) -> None:
+    def forget_port(self, key: str | int) -> None:
         """Drop a port's partial frame (it was closed); counters stay in the totals."""
         parser = self._parsers.pop(key, None)
         if parser is not None:
