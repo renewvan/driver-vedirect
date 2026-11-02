@@ -58,6 +58,9 @@ class Driver:
         self._warned_ports: set[str | int] = set()
         self._noted_unverified: set[str] = set()
         self._last_err: dict[str, str] = {}
+        # (entity, published id) -> lookup (serial / interface tail) that owns it: first seen wins
+        self._owners: dict[tuple[str, str], str] = {}
+        self._refused: set[tuple[str, str]] = set()
         self._merged: dict[str | int, dict[str, str]] = {}  # per port: PID-less (history) blocks
         self._reported_bad = 0
         self._closed_bad = 0
@@ -147,13 +150,27 @@ class Driver:
             serial = match.group(1) if match else self._config.device.id
         if not serial or entity not in ("solar", "charger", "battery"):
             return  # serial-less devices other than the shunt are not published
+        lookup = serial
+        serial = self._config.device_ids.get(lookup, lookup)  # the `id` alias, if any
+        if self._owners.setdefault((entity, serial), lookup) != lookup:
+            if (entity, serial, lookup) not in self._refused:
+                self._refused.add((entity, serial, lookup))
+                logger.error(
+                    "%s id %r is already used by device %r; refusing to publish device %r "
+                    "under it (fix the [device.*] id aliases)",
+                    entity,
+                    serial,
+                    self._owners[(entity, serial)],
+                    lookup,
+                )
+            return
         if entity == "charger":
             self._log_err_change(serial, fields)
         with self._identity_lock:
             if (entity, serial) not in self._identity:
                 props = {
                     "driver": DRIVER_KEY,
-                    "name": self._config.device_names.get(serial, device["model"]),
+                    "name": self._config.device_names.get(lookup, device["model"]),
                 }
                 if "source" in device:
                     props["source"] = device["source"]

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import configparser
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -53,6 +54,35 @@ class AppConfig:
     serial: SerialConfig = field(default_factory=SerialConfig)
     # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
     device_names: dict[str, str] = field(default_factory=dict)
+    # `[device.<lookup>] id = ...`, keyed by lowercased lookup: the topic instance id to publish
+    # under instead of the serial / interface tail. Validated and unique (see load_config).
+    device_ids: dict[str, str] = field(default_factory=dict)
+
+
+_ALIAS = re.compile(r"[a-z0-9_-]+")
+
+
+def _read_device_ids(parser: configparser.ConfigParser) -> dict[str, str]:
+    """Collect the `id` aliases; raise ValueError for an invalid or duplicated one."""
+    ids: dict[str, str] = {}
+    owner: dict[str, str] = {}  # alias -> section that claimed it
+    for name, section in parser.items():
+        if not name.startswith("device.") or "id" not in section:
+            continue
+        alias, lookup = section["id"].strip(), name[len("device.") :].lower()
+        if not _ALIAS.fullmatch(alias):
+            raise ValueError(
+                f"[{name}] id = {alias!r} is not a valid topic instance id: use one MQTT "
+                "topic segment of lowercase letters, digits, '-' and '_'"
+            )
+        if alias in owner:
+            raise ValueError(
+                f"id = {alias!r} is configured by both [{owner[alias]}] and [{name}]; "
+                "each device needs its own id"
+            )
+        owner[alias] = name
+        ids[lookup] = alias
+    return ids
 
 
 def load_config(
@@ -98,4 +128,5 @@ def load_config(
             backoff_max_s=serial.getfloat("backoff_max_s", 30.0),
         ),
         device_names=device_names,
+        device_ids=_read_device_ids(parser),
     )
