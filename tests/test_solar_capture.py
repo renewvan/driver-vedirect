@@ -56,7 +56,7 @@ class FakeClock:
 
 def make_config() -> AppConfig:
     mqtt = MqttConfig("localhost", 1883, None, None, "test", 1.0, 30.0)
-    return AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect", update_interval_ms=3000))
+    return AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect"))
 
 
 def play(data: bytes, chunk: int = 4096) -> FakePublisher:
@@ -128,6 +128,7 @@ def test_hex_frames_between_and_inside_text_blocks_are_ignored():
 def poll_silence(driver, seconds: float, clock: FakeClock) -> None:
     clock.now += seconds
     driver.poll(FakePort(b""))
+    driver.tick()  # the Supervisor ticks after polling every port, ports or not
 
 
 def test_ten_seconds_of_silence_clears_live_properties_but_keeps_identity():

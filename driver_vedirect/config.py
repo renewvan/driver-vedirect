@@ -33,7 +33,6 @@ class MqttConfig:
 @dataclass(frozen=True)
 class DeviceConfig:
     id: str  # topic path segment, e.g. renewvan/vedirect/<id>/...
-    update_interval_ms: int
     baud: int = 19200
 
 
@@ -90,7 +89,6 @@ def load_config(
         ),
         device=DeviceConfig(
             id=device.get("id", "vedirect"),
-            update_interval_ms=device.getint("update_interval_ms", 3000),
             baud=device.getint("baud", 19200),
         ),
         serial=SerialConfig(

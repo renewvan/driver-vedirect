@@ -55,7 +55,6 @@ class Driver:
         self._identity_lock = threading.Lock()
         # (entity, id) -> [last valid frame time, live properties currently published]
         self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
-        self._warned_pids: set[str] = set()
         self._warned_ports: set[str | int] = set()
         self._noted_unverified: set[str] = set()
         self._last_err: dict[str, str] = {}
@@ -75,7 +74,6 @@ class Driver:
         data = port.read(4096)
         for fields in parser.feed(data):
             self._handle(fields, key)
-        self._clear_stale()
         self._report_bad_frames()
         return bool(data)
 
@@ -200,7 +198,8 @@ def run(config: AppConfig) -> None:
 
     # Board serial is read once, here: Publisher republishes this same payload on every reconnect.
     info_payload = build_info_payload(env=os.environ, cpuinfo_path=Path("/proc/cpuinfo"))
-    driver = Driver(publisher := Publisher(config.mqtt, info_payload), config)
+    publisher = Publisher(config.mqtt, info_payload)
+    driver = Driver(publisher, config)
     publisher.on_connect_hook = driver.on_mqtt_connect
     publisher.connect()
 

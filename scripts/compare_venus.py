@@ -85,7 +85,7 @@ def vedirect_topics(raw: bytes) -> dict[str, object]:
     from driver_vedirect.driver import Driver
 
     mqtt = MqttConfig("localhost", 1883, None, None, "parity", 1.0, 30.0)
-    config = AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect", update_interval_ms=3000))
+    config = AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect"))
     publisher, port = _FakePublisher(), _FakePort(raw)
     driver = Driver(publisher, config, clock=lambda: 1000.0)  # frozen: nothing goes stale
     while port.pending():

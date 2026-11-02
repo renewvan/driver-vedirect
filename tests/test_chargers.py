@@ -44,7 +44,7 @@ class FakePublisher:
 
 def make_config() -> AppConfig:
     mqtt = MqttConfig("localhost", 1883, None, None, "test", 1.0, 30.0)
-    return AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect", update_interval_ms=3000))
+    return AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect"))
 
 
 def play(data: bytes, config: AppConfig | None = None) -> FakePublisher:

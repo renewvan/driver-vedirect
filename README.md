@@ -139,7 +139,6 @@ until checked on the van:
 | `[mqtt]` `host`, `port`, `username`, `password`, `client_id`, `reconnect_min_delay`, `reconnect_max_delay` | as in `config.default.ini` | broker; paho reconnects with backoff |
 | `[device]` `id`                    | `vedirect`                        | fallback id for a SmartShunt whose port has no interface tail |
 | `[device]` `baud`                  | `19200`                           | VE.Direct is 19200 8N1 |
-| `[device]` `update_interval_ms`    | `3000`                            | kept for template parity; **not used**, see "Republish" |
 | `[serial]` `by_id_dir`             | `/dev/serial/by-id`               | directory scanned for adapters |
 | `[serial]` `port_globs`            | `usb-Duppa_srl_*, usb-VictronEnergy_*, usb-FTDI_*` | comma-separated `fnmatch` patterns on by-id names |
 | `[serial]` `backoff_min_s`         | `1.0`                             | first retry delay for a port that fails |
@@ -177,8 +176,7 @@ There is deliberately no per-property dedupe and no rate limit in v1:
 - **Logs are rate limited**: bad-checksum blocks at most one WARNING per minute (a count), an
   unknown device one WARNING per port, `ERR` only on change.
 
-If broker load matters, a minimum publish interval per device is the next step; it would reuse
-`update_interval_ms`, which today is read but unused.
+If broker load matters, a minimum publish interval per device is the next step.
 
 ## Wiring
 
