@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # This Driver's key: its repo name minus `driver-`, equal to manifest.json's `driver` and to the
 # `renewvan/<key>/info` segment. Entity instances name it on `renewvan/vedirect/<id>/driver`.
 DRIVER_KEY = "vedirect"
+BAD_FRAME_LOG_INTERVAL_S = 60.0
 
 
 def _topic(entity: str, device_id: str, prop: str) -> str:
@@ -42,11 +43,23 @@ class Driver:
         self._parser = FrameParser()
         self._identified: set[str] = set()
         self._warned_pids: set[str] = set()
+        self._reported_bad = 0
+        self._last_bad_report = float("-inf")
 
     def poll(self, port) -> None:  # noqa: ANN001 - any object with read(size) -> bytes
         """Read one chunk from the port and publish whatever complete blocks it finishes."""
         for fields in self._parser.feed(port.read(4096)):
             self._handle(fields)
+        self._report_bad_frames()
+
+    def _report_bad_frames(self) -> None:
+        """Rate-limited (once per minute) warning for blocks dropped on a bad checksum."""
+        now = self._clock()
+        dropped = self._parser.bad_frames - self._reported_bad
+        if dropped and now - self._last_bad_report >= BAD_FRAME_LOG_INTERVAL_S:
+            logger.warning("Dropped %d VE.Direct block(s) with a bad checksum", dropped)
+            self._reported_bad += dropped
+            self._last_bad_report = now
 
     def _handle(self, fields: dict[str, str]) -> None:
         pid = fields.get("PID", "")

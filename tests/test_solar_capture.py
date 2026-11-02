@@ -95,6 +95,21 @@ def test_bad_checksum_frame_is_dropped():
     assert seen["battery_current_a"] == 1.5  # last good frame wins, corrupt one never published
 
 
+def test_bad_checksum_warnings_are_rate_limited(caplog):
+    first_end = CAPTURE.index(b"Checksum\t") + 10
+    bad = CAPTURE[:first_end].replace(b"V\t13330", b"V\t13331")
+    publisher, clock = FakePublisher(), FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+
+    with caplog.at_level("WARNING"):
+        for _ in range(3):
+            driver.poll(FakePort(bad))
+        assert len(caplog.records) == 1
+        clock.now += 61
+        driver.poll(FakePort(bad))
+        assert len(caplog.records) == 2
+
+
 def test_corrupt_only_stream_publishes_nothing():
     first_end = CAPTURE.index(b"Checksum\t") + 10
     assert play(CAPTURE[:first_end].replace(b"V\t13330", b"V\t13331")).retained == {}

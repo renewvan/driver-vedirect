@@ -48,7 +48,7 @@ Keep conversion/decision logic in pure functions tested against fixture
 values — no MQTT broker or real hardware required for any of it. Before
 opening a PR: `pytest tests/ -v` must pass (same command CI runs), and any
 change to a published field needs a matching
-`hub/schema/vedirect.schema.json` update in a `hub` PR (per
+`hub/schema/solar.schema.json` update in a `hub` PR (per
 `hub/docs/adr/0001-compose-services-via-pinned-images-not-git-submodules.md`,
 the two repos are never coupled at build time, only at the schema-version
 level).
