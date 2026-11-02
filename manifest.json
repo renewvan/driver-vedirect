@@ -1,8 +1,8 @@
 {
   "driver": "vedirect",
-  "product": "VE.Direct",
-  "source": "Victron VE.Direct text mode over USB serial (read-only)",
-  "publishes": [
-    "solar"
-  ]
+  "product": "Victron VE.Direct",
+  "source": "Victron SmartShunt, SmartSolar MPPT, Orion XS and Blue Smart charger over VE.Direct text mode on USB serial (read-only)",
+  "publishes": ["battery", "solar", "charger"],
+  "manufacturer": "renewvan",
+  "homepage": "https://github.com/renewvan/driver-vedirect"
 }

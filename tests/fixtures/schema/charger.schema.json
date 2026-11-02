@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://renewvan.dev/schema/charger.schema.json",
+  "title": "charger",
+  "description": "v0.1 device-model entity: a non-solar battery charger, regardless of vendor: an AC mains charger, or a DC-DC charger fed by the vehicle alternator or another DC source. Published under renewvan/charger/<id>/<property>. Solar controllers are the separate `solar` entity. Only `voltage_v` is required of every source; everything else is optional.",
+  "type": "object",
+  "properties": {
+    "driver": {
+      "type": "string",
+      "pattern": "^(?!driver-)(?!demo$)[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "Optional, retained. The key of the Driver publishing this instance: the <driver> segment of renewvan/<driver>/info, published as renewvan/charger/<id>/driver. Same slug rule as driver-info.schema.json. Identity field. A consumer must tolerate it being absent (a Driver that predates it) and then attributes the instance to every Driver whose info `publishes` lists 'charger'."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional, retained. Human-readable label of this instance (e.g. 'House battery'), published as renewvan/charger/<id>/name. Identity field."
+    },
+    "voltage_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Voltage on the charger's battery (output) side."
+    },
+    "current_a": {
+      "type": "number",
+      "description": "Optional: current delivered to the battery. Positive = into the battery."
+    },
+    "power_w": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: output power delivered to the battery, in watts."
+    },
+    "input_voltage_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: voltage on the charger's input side (alternator/starter battery for a DC-DC charger, mains for an AC charger)."
+    },
+    "source": {
+      "type": "string",
+      "description": "Optional: what feeds the charger. `unknown` is the forward-compat fallback.",
+      "enum": ["ac", "alternator", "dc", "unknown"]
+    },
+    "charge_state": {
+      "type": "string",
+      "description": "Optional: the charger's own charge stage. `unknown` is the forward-compat fallback for any code not in this enum.",
+      "enum": [
+        "off",
+        "fault",
+        "bulk",
+        "absorption",
+        "float",
+        "storage",
+        "equalize",
+        "external_control",
+        "unknown"
+      ]
+    }
+  },
+  "required": ["voltage_v"],
+  "additionalProperties": false
+}

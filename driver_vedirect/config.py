@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import configparser
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -33,15 +34,55 @@ class MqttConfig:
 @dataclass(frozen=True)
 class DeviceConfig:
     id: str  # topic path segment, e.g. renewvan/vedirect/<id>/...
-    update_interval_ms: int
-    port: str = "/dev/ttyUSB0"
     baud: int = 19200
+
+
+@dataclass(frozen=True)
+class SerialConfig:
+    """Where to look for VE.Direct cables and how to recover when one goes away."""
+
+    by_id_dir: str = "/dev/serial/by-id"
+    port_globs: tuple[str, ...] = ("usb-Duppa_srl_*", "usb-VictronEnergy_*", "usb-FTDI_*")
+    backoff_min_s: float = 1.0
+    backoff_max_s: float = 30.0
 
 
 @dataclass(frozen=True)
 class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
+    serial: SerialConfig = field(default_factory=SerialConfig)
+    # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
+    device_names: dict[str, str] = field(default_factory=dict)
+    # `[device.<lookup>] id = ...`, keyed by lowercased lookup: the topic instance id to publish
+    # under instead of the serial / interface tail. Validated and unique (see load_config).
+    device_ids: dict[str, str] = field(default_factory=dict)
+
+
+_ALIAS = re.compile(r"[a-z0-9_-]+")
+
+
+def _read_device_ids(parser: configparser.ConfigParser) -> dict[str, str]:
+    """Collect the `id` aliases; raise ValueError for an invalid or duplicated one."""
+    ids: dict[str, str] = {}
+    owner: dict[str, str] = {}  # alias -> section that claimed it
+    for name, section in parser.items():
+        if not name.startswith("device.") or "id" not in section:
+            continue
+        alias, lookup = section["id"].strip(), name[len("device.") :].lower()
+        if not _ALIAS.fullmatch(alias):
+            raise ValueError(
+                f"[{name}] id = {alias!r} is not a valid topic instance id: use one MQTT "
+                "topic segment of lowercase letters, digits, '-' and '_'"
+            )
+        if alias in owner:
+            raise ValueError(
+                f"id = {alias!r} is configured by both [{owner[alias]}] and [{name}]; "
+                "each device needs its own id"
+            )
+        owner[alias] = name
+        ids[lookup] = alias
+    return ids
 
 
 def load_config(
@@ -57,6 +98,14 @@ def load_config(
 
     mqtt = parser["mqtt"]
     device = parser["device"]
+    serial = parser["serial"]
+    globs = tuple(g.strip() for g in serial.get("port_globs", "").split(",") if g.strip())
+
+    device_names = {
+        name[len("device.") :].lower(): section["name"]
+        for name, section in parser.items()
+        if name.startswith("device.") and section.get("name")
+    }
 
     return AppConfig(
         mqtt=MqttConfig(
@@ -70,8 +119,14 @@ def load_config(
         ),
         device=DeviceConfig(
             id=device.get("id", "vedirect"),
-            update_interval_ms=device.getint("update_interval_ms", 3000),
-            port=device.get("port", "/dev/ttyUSB0"),
             baud=device.getint("baud", 19200),
         ),
+        serial=SerialConfig(
+            by_id_dir=serial.get("by_id_dir", "/dev/serial/by-id"),
+            port_globs=globs,
+            backoff_min_s=serial.getfloat("backoff_min_s", 1.0),
+            backoff_max_s=serial.getfloat("backoff_max_s", 30.0),
+        ),
+        device_names=device_names,
+        device_ids=_read_device_ids(parser),
     )

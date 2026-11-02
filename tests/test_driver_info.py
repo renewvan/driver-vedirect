@@ -21,7 +21,7 @@ def test_info_identifies_the_driver_and_what_it_publishes() -> None:
     info = _info({})
 
     assert info["driver"] == DRIVER_KEY
-    assert info["publishes"] == ["solar"]
+    assert info["publishes"] == ["battery", "solar", "charger"]
     assert info["product"]
     assert info["source"]
 
@@ -48,3 +48,14 @@ def test_info_omits_board_serial_when_unreadable_empty_or_all_zeros(tmp_path: Pa
         cpuinfo = tmp_path / "cpuinfo"
         cpuinfo.write_text(text)
         assert "board_serial" not in _info({}, cpuinfo)
+
+
+def test_manifest_validates_against_the_hub_manifest_schema_and_publishes_every_entity() -> None:
+    from jsonschema import Draft7Validator
+
+    root = Path(__file__).parent
+    schema = json.loads((root / "fixtures" / "schema" / "driver-manifest.schema.json").read_text())
+    manifest = json.loads((root.parent / "manifest.json").read_text())
+
+    assert list(Draft7Validator(schema).iter_errors(manifest)) == []
+    assert manifest["driver"] == DRIVER_KEY

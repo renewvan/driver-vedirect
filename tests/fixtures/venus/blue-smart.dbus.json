@@ -1,0 +1,11 @@
+{
+ "N/PORTAL/charger/289/Dc/0/Voltage": {
+  "value": 13.289999961853027
+ },
+ "N/PORTAL/charger/289/Dc/0/Current": {
+  "value": 30.0
+ },
+ "N/PORTAL/charger/289/State": {
+  "value": 3
+ }
+}

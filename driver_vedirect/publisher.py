@@ -37,6 +37,7 @@ class Publisher:
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
         self._subscriptions: dict[str, Callable[[str], None]] = {}
+        self.on_connect_hook: Callable[[], None] | None = None  # runs after info and `online`
 
     def _on_connect(self, client, userdata, flags, rc):  # noqa: ANN001
         if rc == 0:
@@ -47,6 +48,8 @@ class Publisher:
             client.publish(HEALTH_TOPIC, payload="online", qos=1, retain=True)
             for topic in self._subscriptions:
                 client.subscribe(topic, qos=1)
+            if self.on_connect_hook is not None:
+                self.on_connect_hook()
         else:
             logger.error("MQTT connect failed with rc=%s", rc)
 

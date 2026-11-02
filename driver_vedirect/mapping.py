@@ -51,3 +51,65 @@ def map_solar(fields: dict[str, str]) -> dict[str, object]:
     except ValueError:
         return {}  # a field we cannot read means we do not trust the block
     return out
+
+
+# Venus caps TimeToGo at ~10 days (864000 s); a shunt's 65534 min would otherwise exceed it.
+MAX_TIME_TO_GO_S = 864000
+
+
+def map_battery(fields: dict[str, str]) -> dict[str, object]:
+    """SmartShunt block -> `battery` live properties; `None` means "has no value, clear it".
+
+    `TTG -1` (infinite) and `T ---` (no probe) are None. `charge_state`, `capacity_ah` and
+    `remaining_ah` are deliberately never published (a shunt has no stage; history is in the DB).
+    `H9` (seconds since the last full charge) comes from the merged history block; an unreadable
+    one is skipped on its own rather than discarding the live values.
+    """
+    out: dict[str, object] = {}
+    if "H9" in fields:
+        try:
+            out["time_since_full_charge_s"] = max(int(fields["H9"]), 0)
+        except ValueError:
+            pass
+    try:
+        if "SOC" in fields:
+            out["soc_pct"] = int(fields["SOC"]) / 10  # per mille
+        if "V" in fields:
+            out["voltage_v"] = int(fields["V"]) / 1000
+        if "I" in fields:
+            out["current_a"] = int(fields["I"]) / 1000  # positive = charging
+        if "P" in fields:
+            out["power_w"] = int(fields["P"])
+        if "TTG" in fields:
+            minutes = int(fields["TTG"])
+            out["time_to_go_s"] = None if minutes < 0 else min(minutes * 60, MAX_TIME_TO_GO_S)
+        if "T" in fields:
+            out["temperature_c"] = None if fields["T"].strip() == "---" else int(fields["T"])
+    except ValueError:
+        return {}  # a field we cannot read means we do not trust the block
+    return out
+
+
+def map_charger(fields: dict[str, str]) -> dict[str, object]:
+    """Orion XS / Blue Smart block -> `charger` live properties (`source` is identity, not here).
+
+    `power_w` is `P` when the device sends it, else derived V x I (the Blue Smart sends none).
+    `T ---` (no sensor) and `HC#` are not mapped. Fields that are absent stay absent.
+    """
+    out: dict[str, object] = {}
+    try:
+        if "V" in fields:
+            out["voltage_v"] = int(fields["V"]) / 1000
+        if "I" in fields:
+            out["current_a"] = int(fields["I"]) / 1000
+        if "P" in fields:
+            out["power_w"] = int(fields["P"])
+        elif "V" in fields and "I" in fields:
+            out["power_w"] = round(int(fields["V"]) * int(fields["I"]) / 1_000_000, 1)
+        if "DC_IN_V" in fields:
+            out["input_voltage_v"] = int(fields["DC_IN_V"]) / 100  # 0.01 V
+        if "CS" in fields:
+            out["charge_state"] = charge_state(fields["CS"])
+    except ValueError:
+        return {}
+    return out

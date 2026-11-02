@@ -1,0 +1,17 @@
+{
+ "N/PORTAL/alternator/291/Dc/0/Voltage": {
+  "value": 13.289999961853027
+ },
+ "N/PORTAL/alternator/291/Dc/0/Current": {
+  "value": 0.0
+ },
+ "N/PORTAL/alternator/291/Dc/0/Power": {
+  "value": 0.0
+ },
+ "N/PORTAL/alternator/291/Dc/In/V": {
+  "value": 12.319999694824219
+ },
+ "N/PORTAL/alternator/291/State": {
+  "value": 0
+ }
+}
