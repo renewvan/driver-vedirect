@@ -39,17 +39,11 @@ class DeviceConfig:
 
 
 @dataclass(frozen=True)
-class DeviceOverride:
-    """`[device.<id>]` section; <id> is a lowercased SER# or a by-id interface tail (`if02`)."""
-
-    name: str | None = None
-
-
-@dataclass(frozen=True)
 class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
-    devices: dict[str, DeviceOverride] = field(default_factory=dict)
+    # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
+    device_names: dict[str, str] = field(default_factory=dict)
 
 
 def load_config(
@@ -65,6 +59,12 @@ def load_config(
 
     mqtt = parser["mqtt"]
     device = parser["device"]
+
+    device_names = {
+        name[len("device.") :].lower(): section["name"]
+        for name, section in parser.items()
+        if name.startswith("device.") and section.get("name")
+    }
 
     return AppConfig(
         mqtt=MqttConfig(
@@ -82,9 +82,5 @@ def load_config(
             port=device.get("port", "/dev/ttyUSB0"),
             baud=device.getint("baud", 19200),
         ),
-        devices={
-            name[len("device.") :].lower(): DeviceOverride(name=section.get("name") or None)
-            for name, section in parser.items()
-            if name.startswith("device.")
-        },
+        device_names=device_names,
     )

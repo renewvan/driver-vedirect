@@ -81,3 +81,28 @@ def map_battery(fields: dict[str, str]) -> dict[str, object]:
     except ValueError:
         return {}  # a field we cannot read means we do not trust the block
     return out
+
+
+def map_charger(fields: dict[str, str]) -> dict[str, object]:
+    """Orion XS / Blue Smart block -> `charger` live properties (`source` is identity, not here).
+
+    `power_w` is `P` when the device sends it, else derived V x I (the Blue Smart sends none).
+    `T ---` (no sensor) and `HC#` are not mapped. Fields that are absent stay absent.
+    """
+    out: dict[str, object] = {}
+    try:
+        if "V" in fields:
+            out["voltage_v"] = int(fields["V"]) / 1000
+        if "I" in fields:
+            out["current_a"] = int(fields["I"]) / 1000
+        if "P" in fields:
+            out["power_w"] = int(fields["P"])
+        elif "V" in fields and "I" in fields:
+            out["power_w"] = round(int(fields["V"]) * int(fields["I"]) / 1_000_000, 1)
+        if "DC_IN_V" in fields:
+            out["input_voltage_v"] = int(fields["DC_IN_V"]) / 100  # 0.01 V
+        if "CS" in fields:
+            out["charge_state"] = charge_state(fields["CS"])
+    except ValueError:
+        return {}
+    return out

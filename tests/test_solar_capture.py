@@ -123,3 +123,55 @@ def test_hex_frames_between_and_inside_text_blocks_are_ignored():
     noisy = noisy[:first_end] + hex_frame + noisy[first_end:]
 
     assert play(noisy).instance(BASE) == play(CAPTURE).instance(BASE)
+
+
+def poll_silence(driver, seconds: float, clock: FakeClock) -> None:
+    clock.now += seconds
+    driver.poll(FakePort(b""))
+
+
+def test_ten_seconds_of_silence_clears_live_properties_but_keeps_identity():
+    publisher, clock = FakePublisher(), FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+    driver.poll(FakePort(CAPTURE))
+    live = {k for k in publisher.instance(BASE) if k not in ("driver", "name")}
+
+    poll_silence(driver, 9.9, clock)
+    assert publisher.instance(BASE).keys() >= live  # not stale yet
+
+    poll_silence(driver, 0.2, clock)
+    for prop in live:
+        assert publisher.retained[f"{BASE}/{prop}"] == ""
+    assert publisher.instance(BASE) == {"driver": "vedirect", "name": "SmartSolar MPPT"}
+
+
+def test_clearing_happens_once_per_silence():
+    publisher, clock = FakePublisher(), FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+    driver.poll(FakePort(CAPTURE))
+    poll_silence(driver, 11, clock)
+    sent = []
+    publisher.publish = lambda t, p: sent.append((t, p))
+    poll_silence(driver, 11, clock)
+    assert sent == []
+
+
+def test_frames_resuming_republish_live_values():
+    publisher, clock = FakePublisher(), FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+    driver.poll(FakePort(CAPTURE))
+    before = publisher.instance(BASE)
+    poll_silence(driver, 11, clock)
+
+    driver.poll(FakePort(CAPTURE))
+
+    assert publisher.instance(BASE) == before
+
+
+def test_continuous_frames_never_clear():
+    publisher, clock = FakePublisher(), FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+    for _ in range(5):
+        driver.poll(FakePort(CAPTURE))
+        clock.now += 8
+    assert publisher.instance(BASE)["power_w"] == 21

@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 # `renewvan/<key>/info` segment. Entity instances name it on `renewvan/vedirect/<id>/driver`.
 DRIVER_KEY = "vedirect"
 BAD_FRAME_LOG_INTERVAL_S = 60.0
+# Silence is an invalid reading (hub ADR 0008): see docs/adr/0001-clear-live-values-on-silence.md.
+STALE_AFTER_S = 10.0
 
 
 # `...-if02-port0` -> `if02`: the adapter port a serial-less device (the SmartShunt) is known by.
@@ -47,18 +49,31 @@ class Driver:
         self._clock = clock
         self._parser = FrameParser()
         self._identified: set[str] = set()
+        # (entity, id) -> [last valid frame time, live properties currently published]
+        self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
         self._warned_pids: set[str] = set()
+        self._warned_ports: set[int] = set()
+        self._noted_unverified: set[str] = set()
+        self._last_err: dict[str, str] = {}
+        self._merged: dict[str, str] = {}  # PID-less (shunt history) blocks, merged by key
         self._reported_bad = 0
-        self._merged: dict[str, str] = {}  # PID-less (history) blocks, merged by key
-        self._live: set[str] = set()  # topics published with a value
-        self._cleared: set[str] = set()  # of those, the ones last cleared with an empty payload
         self._last_bad_report = float("-inf")
 
     def poll(self, port) -> None:  # noqa: ANN001 - any object with read(size) -> bytes
         """Read one chunk from the port and publish whatever complete blocks it finishes."""
         for fields in self._parser.feed(port.read(4096)):
-            self._handle(fields, getattr(port, "name", ""))
+            self._handle(fields, port)
+        self._clear_stale()
         self._report_bad_frames()
+
+    def _clear_stale(self) -> None:
+        """Entity-generic: empty retained payloads for the live props of a silent device."""
+        now = self._clock()
+        for (entity, device_id), (last, live) in self._seen.items():
+            if live and now - last >= STALE_AFTER_S:
+                for prop in sorted(live):
+                    self._publisher.publish(_topic(entity, device_id, prop), "")
+                live.clear()
 
     def _report_bad_frames(self) -> None:
         """Rate-limited (once per minute) warning for blocks dropped on a bad checksum."""
@@ -69,58 +84,72 @@ class Driver:
             self._reported_bad += dropped
             self._last_bad_report = now
 
-    def _handle(self, fields: dict[str, str], port_name: str = "") -> None:
-        # The shunt alternates a live block (PID) and an H1..H18 history block (no PID); both
-        # are folded together by key so one never overwrites the other.
+    def _handle(self, fields: dict[str, str], port) -> None:  # noqa: ANN001
+        # The shunt alternates a live block (PID) and an H1..H18 history block (no PID); the
+        # history is folded in by key so neither block overwrites the other.
         if "PID" not in fields:
             self._merged.update(fields)
             return
         pid = fields.get("PID", "")
         device = pids.lookup(pid)
         if device is None:
-            if pid not in self._warned_pids:
-                self._warned_pids.add(pid)
-                logger.warning("Unknown VE.Direct PID %s with fields %s", pid, sorted(fields))
+            device = pids.classify(fields)
+        if device is None:
+            if id(port) not in self._warned_ports:
+                self._warned_ports.add(id(port))
+                logger.warning(
+                    "Unrecognized VE.Direct device (PID %s) with fields %s; publishing nothing",
+                    pid,
+                    sorted(fields),
+                )
             return
-        if device["entity"] == "battery":
-            self._handle_battery({**self._merged, **fields}, device, port_name)
-            return
+        if device.get("verified") is False and pid not in self._noted_unverified:
+            self._noted_unverified.add(pid)
+            logger.info("First sight of unverified VE.Direct PID %s (%s)", pid, device["model"])
+        entity = device["entity"]
+        if entity == "battery":
+            fields = {**self._merged, **fields}
         serial = fields.get("SER#", "").lower()
-        if not serial or device["entity"] != "solar":
-            return  # other entities arrive in later tickets
+        if not serial and entity == "battery":  # the SmartShunt: its adapter port names it
+            match = _INTERFACE_TAIL.search(getattr(port, "name", ""))
+            serial = match.group(1) if match else self._config.device.id
+        if not serial or entity not in ("solar", "charger", "battery"):
+            return  # serial-less devices other than the shunt are not published
+        if entity == "charger":
+            self._log_err_change(serial, fields)
         if serial not in self._identified:
             self._identified.add(serial)
-            self._publish("solar", serial, "driver", DRIVER_KEY)
-            self._publish("solar", serial, "name", device["model"])
-        for prop, value in mapping.map_solar(fields).items():
-            self._publish("solar", serial, prop, value)
+            self._publish(entity, serial, "driver", DRIVER_KEY)
+            name = self._config.device_names.get(serial, device["model"])
+            self._publish(entity, serial, "name", name)
+            if "source" in device:
+                self._publish(entity, serial, "source", device["source"])
+        mapper = {
+            "charger": mapping.map_charger,
+            "battery": mapping.map_battery,
+        }.get(entity, mapping.map_solar)
+        live = self._seen.setdefault((entity, serial), (0.0, set()))[1]
+        self._seen[(entity, serial)] = (self._clock(), live)
+        for prop, value in mapper(fields).items():
+            if value is None:  # no estimate / no probe (TTG -1, T ---): clear an earlier value
+                if prop in live:
+                    self._publisher.publish(_topic(entity, serial, prop), "")
+                    live.discard(prop)
+                continue
+            self._publish(entity, serial, prop, value)
+            live.add(prop)
 
-    def _handle_battery(self, fields: dict[str, str], device: dict, port_name: str) -> None:
-        match = _INTERFACE_TAIL.search(port_name)
-        device_id = fields.get("SER#", "").lower() or (
-            match.group(1) if match else self._config.device.id
-        )
-        if device_id not in self._identified:
-            self._identified.add(device_id)
-            override = self._config.devices.get(device_id)
-            self._publish("battery", device_id, "driver", DRIVER_KEY)
-            self._publish(
-                "battery", device_id, "name", (override and override.name) or device["model"]
-            )
-        for prop, value in mapping.map_battery(fields).items():
-            topic = _topic("battery", device_id, prop)
-            if value is not None:
-                self._cleared.discard(topic)
-                self._publish("battery", device_id, prop, value)
-            elif topic in self._live and topic not in self._cleared:
-                # No estimate / no probe any more: clear what we published earlier.
-                self._cleared.add(topic)
-                self._publisher.publish(topic, "")
+    def _log_err_change(self, serial: str, fields: dict[str, str]) -> None:
+        err = fields.get("ERR")
+        if err is None:
+            return
+        previous = self._last_err.get(serial, "0")  # a healthy first reading is not news
+        self._last_err[serial] = err
+        if err != previous:
+            logger.warning("Charger %s ERR changed %s -> %s", serial, previous, err)
 
     def _publish(self, entity: str, device_id: str, prop: str, value: object) -> None:
-        topic = _topic(entity, device_id, prop)
-        self._live.add(topic)
-        self._publisher.publish(topic, json.dumps(value))
+        self._publisher.publish(_topic(entity, device_id, prop), json.dumps(value))
 
 
 def run(config: AppConfig) -> None:
