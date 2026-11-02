@@ -1,6 +1,8 @@
 {
   "driver": "vedirect",
   "product": "VE.Direct",
-  "source": "TODO: the hardware or feed this Driver reads",
-  "publishes": ["vedirect"]
+  "source": "Victron VE.Direct text mode over USB serial (read-only)",
+  "publishes": [
+    "solar"
+  ]
 }

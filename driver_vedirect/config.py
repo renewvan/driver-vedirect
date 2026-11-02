@@ -34,10 +34,8 @@ class MqttConfig:
 class DeviceConfig:
     id: str  # topic path segment, e.g. renewvan/vedirect/<id>/...
     update_interval_ms: int
-    # TODO: add VE.Direct-specific fields here (e.g. serial port,
-    # baud rate, I2C address, remote feed host) -- see driver-tank's
-    # TankConfig for the shape of a hardware-backed device, or
-    # driver-venus's config for a feed-remap device.
+    port: str = "/dev/ttyUSB0"
+    baud: int = 19200
 
 
 @dataclass(frozen=True)
@@ -73,5 +71,7 @@ def load_config(
         device=DeviceConfig(
             id=device.get("id", "vedirect"),
             update_interval_ms=device.getint("update_interval_ms", 3000),
+            port=device.get("port", "/dev/ttyUSB0"),
+            baud=device.getint("baud", 19200),
         ),
     )

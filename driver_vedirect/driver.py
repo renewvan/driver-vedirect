@@ -1,29 +1,22 @@
-"""Publish loop: TODO describe VE.Direct read -> publish ->
-renewvan/vedirect/<id>/<property>.
+"""Publish loop: VE.Direct bytes -> frames -> renewvan/<entity>/<id>/<property>.
 
-This is a scaffolded stub -- see the design checklist in README.md. Fill
-in, in order:
-
-1. A reader for the physical hardware/feed (see driver-tank's adc.py for a
-   device that owns the sensing, or driver-venus's Victron MQTT subscription
-   for a device that remaps an existing feed -- Q1 of the design round
-   decides which shape this is).
-2. The fields this device publishes, matching a hub/schema/<entity>.schema.json
-   contract (new entity) or an existing one (Q2/Q3 of the design round).
-3. Identity fields (published once at startup) vs live fields (republished
-   every poll) -- see driver-tank's publish_identity()/read_and_publish()
-   split for the pattern.
+Read-only: nothing is ever written to the device. Tests drive this module through `Driver.poll`
+with a fake port, publisher and clock.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
 from pathlib import Path
+from typing import Callable
 
+from driver_vedirect import mapping, pids
 from driver_vedirect.config import AppConfig
 from driver_vedirect.driver_info import build_info_payload
+from driver_vedirect.frames import FrameParser
 from driver_vedirect.publisher import Publisher
 
 logger = logging.getLogger(__name__)
@@ -33,29 +26,65 @@ logger = logging.getLogger(__name__)
 DRIVER_KEY = "vedirect"
 
 
-def _topic(device_id: str, prop: str) -> str:
-    return f"renewvan/vedirect/{device_id}/{prop}"
+def _topic(entity: str, device_id: str, prop: str) -> str:
+    return f"renewvan/{entity}/{device_id}/{prop}"
 
 
-def read_and_publish(publisher: Publisher, config: AppConfig) -> None:
-    """TODO: read the hardware/feed and publish live fields via
-    publisher.publish(_topic(config.device.id, "<property>"), payload).
-    """
-    raise NotImplementedError(
-        "Implement the VE.Direct read+publish step (see this module's docstring)"
-    )
+class Driver:
+    """Bytes from a serial port in, retained entity topics out. `clock` is injected for tests."""
+
+    def __init__(
+        self, publisher: Publisher, config: AppConfig, clock: Callable[[], float] = time.monotonic
+    ) -> None:
+        self._publisher = publisher
+        self._config = config
+        self._clock = clock
+        self._parser = FrameParser()
+        self._identified: set[str] = set()
+        self._warned_pids: set[str] = set()
+
+    def poll(self, port) -> None:  # noqa: ANN001 - any object with read(size) -> bytes
+        """Read one chunk from the port and publish whatever complete blocks it finishes."""
+        for fields in self._parser.feed(port.read(4096)):
+            self._handle(fields)
+
+    def _handle(self, fields: dict[str, str]) -> None:
+        pid = fields.get("PID", "")
+        device = pids.lookup(pid)
+        if device is None:
+            if pid not in self._warned_pids:
+                self._warned_pids.add(pid)
+                logger.warning("Unknown VE.Direct PID %s with fields %s", pid, sorted(fields))
+            return
+        serial = fields.get("SER#", "").lower()
+        if not serial or device["entity"] != "solar":
+            return  # other entities and serial-less devices arrive in later tickets
+        if serial not in self._identified:
+            self._identified.add(serial)
+            self._publish("solar", serial, "driver", DRIVER_KEY)
+            self._publish("solar", serial, "name", device["model"])
+        for prop, value in mapping.map_solar(fields).items():
+            self._publish("solar", serial, prop, value)
+
+    def _publish(self, entity: str, device_id: str, prop: str, value: object) -> None:
+        self._publisher.publish(_topic(entity, device_id, prop), json.dumps(value))
 
 
 def run(config: AppConfig) -> None:
+    import serial  # imported here so tests need no serial stack
+
     # Board serial is read once, here: Publisher republishes this same payload on every reconnect.
     info_payload = build_info_payload(env=os.environ, cpuinfo_path=Path("/proc/cpuinfo"))
     publisher = Publisher(config.mqtt, info_payload)
     publisher.connect()
+    # Read-only: the port is only ever read from. Port discovery and reconnects are a later ticket.
+    port = serial.Serial(config.device.port, config.device.baud, timeout=1)
+    driver = Driver(publisher, config)
     try:
         while True:
-            read_and_publish(publisher, config)
-            time.sleep(config.device.update_interval_ms / 1000)
+            driver.poll(port)
     except KeyboardInterrupt:
         logger.info("Shutting down")
     finally:
+        port.close()
         publisher.disconnect()

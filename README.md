@@ -2,54 +2,38 @@
 
 Reads Victron VE.Direct text mode over USB serial (read-only) and publishes battery, solar and charger to the renewvan MQTT bus
 
-Scaffolded from `renewvan/driver-tank`'s reference shape via `renewvan/skills`'
-`renewvan-create-driver` skill (per the **Device** term in `hub/docs/architecture.md`'s
-Terminology section: "anything that publishes one specific device or feed
-onto the renewvan bus, normalized into the device model"). Layout: pure,
-unit-testable conversion math with no I/O, a layered
-`config.default.ini`/`config.ini` loader (`config.py`), a persistent MQTT
-publisher with LWT (`publisher.py`), a thin publish loop (`driver.py`), a
-systemd unit, and its own Dockerfile + CI publishing a versioned image.
+Read-only: the serial port is only ever read from; nothing is written to a device. Layout follows
+`renewvan/driver-tank`: layered `config.default.ini`/`config.ini` (`config.py`), MQTT with LWT
+health and retained Driver info (`publisher.py`), VE.Direct framing (`frames.py`), the PID table
+(`pids.json`, one line per device), field mapping (`mapping.py`) and the publish loop (`driver.py`).
 
-**This repo is a scaffold, not a working device yet** — `driver.py`'s
-`read_and_publish()` raises `NotImplementedError` until the design round
-below is resolved and implemented.
-
-## Design checklist (resolve before first real commit)
-
-- [ ] **Sensing or remapping?** Does this device own the sensing (reads
-      hardware directly, like driver-tank's ADS1115) or remap an existing feed
-      (like driver-venus's Victron remap)?
-- [ ] **Topics published** — replace the section below with the real
-      `renewvan/vedirect/<id>/<property>` fields, split into identity
-      (published once) vs live (republished every poll). See driver-tank's
-      README "Topics published" section for the shape to match.
-- [ ] **Hub schema** — does VE.Direct extend an existing
-      `hub/schema/*.schema.json` entity, or need a new
-      `hub/schema/vedirect.schema.json` + example fixtures
-      (`hub/schema/validate-examples.sh` must pass)?
-- [ ] **Wiring** — replace the section below with real hardware
-      wiring/config, or delete it if this device remaps an existing feed
-      instead of reading hardware directly.
-- [ ] **`manifest.json`** — fill in `source` (the TODO) and check `publishes`
-      lists every entity type this Driver publishes. It must validate against
-      the hub's `driver-manifest.schema.json` (CI's Manifest job runs it);
-      never add `version` or `board_serial`. See `hub/docs/authoring-a-driver.md`.
-- [ ] **Demo fleet** — add this Driver to `hub/schema/demo/fleet.demo-fleet.json`
-      if Demo mode should show it (`hub/docs/demo-mode.md`).
-- [ ] **`DeviceConfig`** (`driver_vedirect/config.py`) — add the hardware/feed
-      -specific fields this device needs, mirrored into `config.default.ini`.
-- [ ] **Hub integration** — once a version is tagged, add a
-      `driver-vedirect` service block to `hub/docker-compose.yml` (pattern:
-      driver-tank's block) and any new keys to `hub/.env.example`.
+**Status: walking skeleton.** A SmartSolar MPPT stream is published as a `solar` instance. The
+battery (SmartShunt) and charger (Orion XS, Blue Smart) entities, staleness clearing, by-id port
+discovery and reconnects are later tickets under hub#124. Devices in `pids.json` other than the
+SmartSolar are recognised but not published yet. PIDs `0xC035` and `0xA330` come from a capture,
+not a primary source (`"verified": false`).
 
 ## Topics published
 
-TODO — see the design checklist above.
+`renewvan/solar/<serial>/<property>`, retained JSON; `<serial>` is the lowercased `SER#`.
+
+| Property            | Source                                   | Kind     |
+| ------------------- | ---------------------------------------- | -------- |
+| `driver`, `name`    | Driver key, PID table model              | identity |
+| `power_w`           | `PPV` (W)                                | live     |
+| `battery_voltage_v` | `V` (mV)                                 | live     |
+| `battery_current_a` | `I` (mA, + = charging)                   | live     |
+| `pv_voltage_v`      | `VPV` (mV)                               | live     |
+| `pv_current_a`      | derived `PPV / VPV` (no such VE.Direct field) | live |
+| `yield_today_wh`    | `H20` (0.01 kWh)                         | live     |
+| `charge_state`      | `CS`, same table as driver-venus         | live     |
+
+Frames with a bad checksum are dropped; HEX messages interleaved with text blocks are ignored.
 
 ## Wiring
 
-TODO — see the design checklist above.
+One VE.Direct USB cable per device, 19200 8N1. Set `[device] port` (default `/dev/ttyUSB0`) in
+`config.ini`.
 
 ## Development
 

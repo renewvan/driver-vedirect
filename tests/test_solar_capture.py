@@ -1,0 +1,110 @@
+"""The one test seam: bytes in through a fake serial port, MQTT topics out
+through a fake publisher, time from a fake clock. No test reaches into the
+parser, the PID table or the mapper."""
+
+import json
+from pathlib import Path
+
+import pytest
+from jsonschema import Draft7Validator
+
+from driver_vedirect.config import AppConfig, DeviceConfig, MqttConfig
+from driver_vedirect.driver import Driver
+
+FIXTURES = Path(__file__).parent / "fixtures"
+SOLAR_SCHEMA = json.loads((FIXTURES / "schema" / "solar.schema.json").read_text())
+CAPTURE = (FIXTURES / "smartsolar-mppt.raw").read_bytes()
+BASE = "renewvan/solar/hq2001qure8"
+
+
+class FakePort:
+    """Serial port that hands out its bytes in fixed-size chunks, then b'' (a read timeout)."""
+
+    def __init__(self, data: bytes, chunk: int = 4096) -> None:
+        self._data, self._chunk = data, chunk
+
+    def read(self, size: int = 4096) -> bytes:
+        out, self._data = self._data[: self._chunk], self._data[self._chunk :]
+        return out
+
+
+class FakePublisher:
+    """Keeps the last retained payload per topic, like a broker would."""
+
+    def __init__(self) -> None:
+        self.retained: dict[str, str] = {}
+
+    def publish(self, topic: str, payload: str) -> None:
+        self.retained[topic] = payload
+
+    def instance(self, base: str) -> dict:
+        prefix = base + "/"
+        return {
+            t[len(prefix) :]: json.loads(p)
+            for t, p in self.retained.items()
+            if t.startswith(prefix) and p != ""
+        }
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def make_config() -> AppConfig:
+    mqtt = MqttConfig("localhost", 1883, None, None, "test", 1.0, 30.0)
+    return AppConfig(mqtt=mqtt, device=DeviceConfig(id="vedirect", update_interval_ms=3000))
+
+
+def play(data: bytes, chunk: int = 4096) -> FakePublisher:
+    publisher = FakePublisher()
+    driver = Driver(publisher, make_config(), clock=FakeClock())
+    port = FakePort(data, chunk)
+    while port._data:
+        driver.poll(port)
+    return publisher
+
+
+def test_smartsolar_capture_publishes_a_schema_valid_solar_instance():
+    solar = play(CAPTURE).instance(BASE)
+
+    assert solar["power_w"] == 21
+    assert solar["battery_voltage_v"] == 13.33
+    assert solar["battery_current_a"] == 1.5
+    assert solar["pv_voltage_v"] == 45.07
+    assert solar["pv_current_a"] == pytest.approx(21 / 45.07, abs=0.001)
+    assert solar["yield_today_wh"] == 140
+    assert solar["charge_state"] == "bulk"
+    assert solar["driver"] == "vedirect"
+    assert list(Draft7Validator(SOLAR_SCHEMA).iter_errors(solar)) == []
+
+
+def test_split_frames_are_reassembled():
+    assert play(CAPTURE, chunk=7).instance(BASE) == play(CAPTURE).instance(BASE)
+
+
+def test_bad_checksum_frame_is_dropped():
+    first_end = CAPTURE.index(b"Checksum\t") + 10
+    corrupt = CAPTURE[:first_end] + CAPTURE[first_end:].replace(b"I\t1600", b"I\t9999", 1)
+
+    seen = play(corrupt).instance(BASE)
+
+    assert seen["battery_current_a"] == 1.5  # last good frame wins, corrupt one never published
+
+
+def test_corrupt_only_stream_publishes_nothing():
+    first_end = CAPTURE.index(b"Checksum\t") + 10
+    assert play(CAPTURE[:first_end].replace(b"V\t13330", b"V\t13331")).retained == {}
+
+
+def test_hex_frames_between_and_inside_text_blocks_are_ignored():
+    hex_frame = b":7F0ED0064\n"
+    mid = CAPTURE.index(b"VPV")
+    noisy = CAPTURE[:mid] + hex_frame + CAPTURE[mid:]
+    first_end = noisy.index(b"Checksum\t") + 10
+    noisy = noisy[:first_end] + hex_frame + noisy[first_end:]
+
+    assert play(noisy).instance(BASE) == play(CAPTURE).instance(BASE)

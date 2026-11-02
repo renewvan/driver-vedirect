@@ -1,0 +1,7 @@
+{
+  "0xA056": {"entity": "solar", "model": "SmartSolar MPPT"},
+  "0xA3F0-0xA3FF": {"entity": "charger", "source": "alternator", "model": "Orion XS"},
+  "0xA330": {"entity": "charger", "source": "ac", "model": "Blue Smart", "verified": false},
+  "0xC035": {"entity": "battery", "model": "SmartShunt", "verified": false},
+  "0xA389": {"entity": "battery", "model": "SmartShunt"}
+}

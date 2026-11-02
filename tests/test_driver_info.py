@@ -21,7 +21,7 @@ def test_info_identifies_the_driver_and_what_it_publishes() -> None:
     info = _info({})
 
     assert info["driver"] == DRIVER_KEY
-    assert info["publishes"] == ["vedirect"]
+    assert info["publishes"] == ["solar"]
     assert info["product"]
     assert info["source"]
 
