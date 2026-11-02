@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 # `renewvan/<key>/info` segment. Entity instances name it on `renewvan/vedirect/<id>/driver`.
 DRIVER_KEY = "vedirect"
 BAD_FRAME_LOG_INTERVAL_S = 60.0
+# Silence is an invalid reading (hub ADR 0008): see docs/adr/0001-clear-live-values-on-silence.md.
+STALE_AFTER_S = 10.0
 
 
 def _topic(entity: str, device_id: str, prop: str) -> str:
@@ -42,6 +44,8 @@ class Driver:
         self._clock = clock
         self._parser = FrameParser()
         self._identified: set[str] = set()
+        # (entity, id) -> [last valid frame time, live properties currently published]
+        self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
         self._warned_pids: set[str] = set()
         self._last_err: dict[str, str] = {}
         self._reported_bad = 0
@@ -51,7 +55,17 @@ class Driver:
         """Read one chunk from the port and publish whatever complete blocks it finishes."""
         for fields in self._parser.feed(port.read(4096)):
             self._handle(fields)
+        self._clear_stale()
         self._report_bad_frames()
+
+    def _clear_stale(self) -> None:
+        """Entity-generic: empty retained payloads for the live props of a silent device."""
+        now = self._clock()
+        for (entity, device_id), (last, live) in self._seen.items():
+            if live and now - last >= STALE_AFTER_S:
+                for prop in sorted(live):
+                    self._publisher.publish(_topic(entity, device_id, prop), "")
+                live.clear()
 
     def _report_bad_frames(self) -> None:
         """Rate-limited (once per minute) warning for blocks dropped on a bad checksum."""
@@ -84,8 +98,11 @@ class Driver:
             if "source" in device:
                 self._publish(entity, serial, "source", device["source"])
         mapper = mapping.map_charger if entity == "charger" else mapping.map_solar
+        live = self._seen.setdefault((entity, serial), (0.0, set()))[1]
+        self._seen[(entity, serial)] = (self._clock(), live)
         for prop, value in mapper(fields).items():
             self._publish(entity, serial, prop, value)
+            live.add(prop)
 
     def _log_err_change(self, serial: str, fields: dict[str, str]) -> None:
         err = fields.get("ERR")
