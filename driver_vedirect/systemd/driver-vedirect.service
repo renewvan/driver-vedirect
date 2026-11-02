@@ -1,0 +1,15 @@
+[Unit]
+Description=driver-vedirect MQTT device
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/driver-vedirect
+ExecStart=/opt/driver-vedirect/.venv/bin/python -m driver_vedirect.main --config /opt/driver-vedirect/config.ini
+Restart=on-failure
+RestartSec=5
+User=renewvan
+
+[Install]
+WantedBy=multi-user.target
