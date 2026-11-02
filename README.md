@@ -141,17 +141,16 @@ until checked on the van:
 | `[device]` `baud`                  | `19200`                           | VE.Direct is 19200 8N1 |
 | `[device]` `update_interval_ms`    | `3000`                            | kept for template parity; **not used**, see "Republish" |
 | `[serial]` `by_id_dir`             | `/dev/serial/by-id`               | directory scanned for adapters |
-| `[serial]` `port_globs`            | `usb-VictronEnergy_*, usb-FTDI_*` | comma-separated `fnmatch` patterns on by-id names |
+| `[serial]` `port_globs`            | `usb-Duppa_srl_*, usb-VictronEnergy_*, usb-FTDI_*` | comma-separated `fnmatch` patterns on by-id names |
 | `[serial]` `backoff_min_s`         | `1.0`                             | first retry delay for a port that fails |
 | `[serial]` `backoff_max_s`         | `30.0`                            | the doubling stops here |
 | `[device.<id>]` `name`             |                                   | relabel one instance; `<id>` is the lowercased `SER#` or the interface tail (`if02`), any case |
 
-**`port_globs` default is a GUESS and needs a check on the Pi.** The van uses one Duppa quad-port
-adapter; its real by-id name (`ls /dev/serial/by-id` on the Pi) has not been confirmed against
-`usb-VictronEnergy_*, usb-FTDI_*`. The SmartShunt test fixture path suggests
-`usb-Duppa_srl_USB_QUADPORT_VE.DIRECT_...-if02-port0`, which neither default glob matches. Confirm
-the name and set `port_globs` (and the hub's `vedirect` profile gate) accordingly. Narrow the
-globs when other USB serial adapters share the directory.
+**Confirm `port_globs` on the Pi.** The van uses one Duppa quad-port adapter. The default includes
+`usb-Duppa_srl_*`, matching the by-id name seen in the SmartShunt capture
+(`usb-Duppa_srl_USB_QUADPORT_VE.DIRECT_...-if02-port0`), but run `ls /dev/serial/by-id` on the Pi to
+confirm it, and set the hub's `vedirect` profile gate to the same globs. Narrow the globs when other
+USB serial adapters share the directory.
 
 ### Discovery and backoff
 

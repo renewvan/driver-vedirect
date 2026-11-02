@@ -42,7 +42,7 @@ class SerialConfig:
     """Where to look for VE.Direct cables and how to recover when one goes away."""
 
     by_id_dir: str = "/dev/serial/by-id"
-    port_globs: tuple[str, ...] = ("usb-VictronEnergy_*", "usb-FTDI_*")
+    port_globs: tuple[str, ...] = ("usb-Duppa_srl_*", "usb-VictronEnergy_*", "usb-FTDI_*")
     backoff_min_s: float = 1.0
     backoff_max_s: float = 30.0
 
