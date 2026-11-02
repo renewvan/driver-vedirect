@@ -47,13 +47,15 @@ class Driver:
         # (entity, id) -> [last valid frame time, live properties currently published]
         self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
         self._warned_pids: set[str] = set()
+        self._warned_ports: set[int] = set()
+        self._noted_unverified: set[str] = set()
         self._reported_bad = 0
         self._last_bad_report = float("-inf")
 
     def poll(self, port) -> None:  # noqa: ANN001 - any object with read(size) -> bytes
         """Read one chunk from the port and publish whatever complete blocks it finishes."""
         for fields in self._parser.feed(port.read(4096)):
-            self._handle(fields)
+            self._handle(fields, port)
         self._clear_stale()
         self._report_bad_frames()
 
@@ -75,14 +77,23 @@ class Driver:
             self._reported_bad += dropped
             self._last_bad_report = now
 
-    def _handle(self, fields: dict[str, str]) -> None:
+    def _handle(self, fields: dict[str, str], port) -> None:  # noqa: ANN001
         pid = fields.get("PID", "")
         device = pids.lookup(pid)
         if device is None:
-            if pid not in self._warned_pids:
-                self._warned_pids.add(pid)
-                logger.warning("Unknown VE.Direct PID %s with fields %s", pid, sorted(fields))
+            device = pids.classify(fields)
+        if device is None:
+            if id(port) not in self._warned_ports:
+                self._warned_ports.add(id(port))
+                logger.warning(
+                    "Unrecognized VE.Direct device (PID %s) with fields %s; publishing nothing",
+                    pid,
+                    sorted(fields),
+                )
             return
+        if device.get("verified") is False and pid not in self._noted_unverified:
+            self._noted_unverified.add(pid)
+            logger.info("First sight of unverified VE.Direct PID %s (%s)", pid, device["model"])
         serial = fields.get("SER#", "").lower()
         if not serial or device["entity"] != "solar":
             return  # other entities and serial-less devices arrive in later tickets
