@@ -106,7 +106,7 @@ topics only.
 
 ## What the Blue Smart frames contain
 
-From the capture (`tests/fixtures/blue-smart.raw`, serial redacted if you replace it):
+From the capture (`tests/fixtures/blue-smart.raw`):
 
 `PID` `0xA330`, `FWE` `0369FF`, `SER#`, `V`, `I`, `T`, `ERR`, `CS`, `HC#`.
 
