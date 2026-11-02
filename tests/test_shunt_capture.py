@@ -57,11 +57,52 @@ def test_smartshunt_capture_publishes_a_schema_valid_battery_instance():
     assert list(Draft7Validator(BATTERY_SCHEMA).iter_errors(battery)) == []
 
 
-def test_history_block_does_not_lose_or_overwrite_live_values_and_h_keys_are_not_published():
+def test_history_block_does_not_lose_live_values_and_only_h9_is_published():
     battery = play(CAPTURE).instance(BASE)
 
     assert not any(key.startswith("H") for key in battery)
-    assert set(battery) == {"driver", "name", "soc_pct", "voltage_v", "current_a", "power_w"}
+    assert set(battery) == {
+        "driver",
+        "name",
+        "soc_pct",
+        "voltage_v",
+        "current_a",
+        "power_w",
+        "time_since_full_charge_s",
+    }
+    assert battery["time_since_full_charge_s"] == 693633  # H9, as in the Venus fixture
+    assert list(Draft7Validator(BATTERY_SCHEMA).iter_errors(battery)) == []
+
+
+def test_h9_from_a_history_block_is_merged_into_later_live_blocks():
+    history = block([("H9", "1200")])
+
+    battery = play(history + live()).instance(BASE)
+
+    assert battery["time_since_full_charge_s"] == 1200
+
+
+def test_time_since_full_charge_is_absent_until_a_history_block_arrives():
+    assert "time_since_full_charge_s" not in play(live()).instance(BASE)
+
+
+def test_unreadable_h9_is_skipped_without_losing_the_live_values():
+    battery = play(block([("H9", "x")]) + live()).instance(BASE)
+
+    assert "time_since_full_charge_s" not in battery
+    assert battery["power_w"] == 12
+
+
+def test_time_since_full_charge_is_cleared_after_silence_with_the_live_values():
+    publisher = FakePublisher()
+    clock = FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+    driver.poll(NamedPort(block([("H9", "1200")]) + live()))
+    clock.now += 11
+
+    driver.tick()
+
+    assert publisher.retained[f"{BASE}/time_since_full_charge_s"] == ""
 
 
 def test_charge_state_capacity_and_remaining_are_deliberately_not_published():

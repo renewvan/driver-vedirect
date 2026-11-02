@@ -62,8 +62,15 @@ def map_battery(fields: dict[str, str]) -> dict[str, object]:
 
     `TTG -1` (infinite) and `T ---` (no probe) are None. `charge_state`, `capacity_ah` and
     `remaining_ah` are deliberately never published (a shunt has no stage; history is in the DB).
+    `H9` (seconds since the last full charge) comes from the merged history block; an unreadable
+    one is skipped on its own rather than discarding the live values.
     """
     out: dict[str, object] = {}
+    if "H9" in fields:
+        try:
+            out["time_since_full_charge_s"] = max(int(fields["H9"]), 0)
+        except ValueError:
+            pass
     try:
         if "SOC" in fields:
             out["soc_pct"] = int(fields["SOC"]) / 10  # per mille

@@ -70,6 +70,7 @@ published.
 | `power_w`       | `P` (W)                                                 |
 | `time_to_go_s`  | `TTG` (min x 60, capped at 864000 like Venus); `-1` (infinite) leaves it absent, clearing an earlier value |
 | `temperature_c` | `T`; `---` (no probe) leaves it absent                  |
+| `time_since_full_charge_s` | `H9` (s, from the history block merged by key) |
 
 `charge_state`, `capacity_ah` and `remaining_ah` are deliberately not published.
 
@@ -95,7 +96,6 @@ topics only.
 | ----------------------------------------- | ---------------------------------------------- | -------------------- |
 | `battery/<id>/charge_state`               | system state fanned out to every battery       | not published (a shunt has no stage) |
 | `battery/<id>/capacity_ah`, `remaining_ah`| configured capacity and consumed Ah            | not published (needs HEX; history comes from the database) |
-| `battery/<id>/time_since_full_charge_s`   | from `History/TimeSinceLastFullCharge`         | not published |
 | `solar/<id>/yield_history_wh`             | day log from the MPPT history                  | not published (needs HEX; history comes from the database) |
 | BMS topics (`cell_voltages_v`, `protections`, limits and the rest) | from `dbus-serialbattery`     | not applicable, no BMS on VE.Direct |
 | `charger/<id>/power_w` (Blue Smart)       | not set (Venus has AC input power only)        | derived `V x I`, output power |
