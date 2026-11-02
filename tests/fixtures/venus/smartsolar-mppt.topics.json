@@ -1,0 +1,13 @@
+{
+ "renewvan/solar/278/battery_current_a": 1.5,
+ "renewvan/solar/278/battery_voltage_v": 13.329999923706055,
+ "renewvan/solar/278/charge_state": "bulk",
+ "renewvan/solar/278/power_w": 21.0,
+ "renewvan/solar/278/pv_current_a": 0.4659418761730194,
+ "renewvan/solar/278/pv_voltage_v": 45.06999969482422,
+ "renewvan/solar/278/yield_history_wh": [
+  140.0,
+  190.0
+ ],
+ "renewvan/solar/278/yield_today_wh": 140.0
+}

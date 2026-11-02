@@ -1,0 +1,28 @@
+{
+ "N/PORTAL/system/0/Batteries": {
+  "value": [
+   {
+    "instance": 290,
+    "soc": 67.9000015258789,
+    "voltage": 13.321000099182129,
+    "current": 0.8629999756813049,
+    "power": 11.0
+   }
+  ]
+ },
+ "N/PORTAL/system/0/SystemState/State": {
+  "value": 3
+ },
+ "N/PORTAL/battery/290/TimeToGo": {
+  "value": null
+ },
+ "N/PORTAL/battery/290/Capacity": {
+  "value": 314.0
+ },
+ "N/PORTAL/battery/290/ConsumedAmphours": {
+  "value": -113.56600189208984
+ },
+ "N/PORTAL/battery/290/History/TimeSinceLastFullCharge": {
+  "value": 693633
+ }
+}

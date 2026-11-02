@@ -1,0 +1,8 @@
+{
+ "renewvan/charger/291/charge_state": "off",
+ "renewvan/charger/291/current_a": 0.0,
+ "renewvan/charger/291/input_voltage_v": 12.319999694824219,
+ "renewvan/charger/291/power_w": 0.0,
+ "renewvan/charger/291/source": "alternator",
+ "renewvan/charger/291/voltage_v": 13.289999961853027
+}
