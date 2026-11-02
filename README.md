@@ -3,7 +3,7 @@
 Reads Victron VE.Direct text mode over USB serial (read-only) and publishes battery, solar and charger to the renewvan MQTT bus
 
 Read-only: the serial port is only ever read from; nothing is written to a device. Layout follows
-`renewvan/driver-tank`: layered `config.default.ini`/`config.ini` (`config.py`), MQTT with LWT
+`renewvan/driver-template`: layered `config.default.ini`/`config.ini` (`config.py`), MQTT with LWT
 health and retained Driver info (`publisher.py`), VE.Direct framing (`frames.py`), the PID table
 (`pids.json`, one line per device), field mapping (`mapping.py`) and the publish loop (`driver.py`).
 
