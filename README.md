@@ -210,16 +210,18 @@ python -m driver_vedirect.main --config config.ini
 ### systemd (no container)
 
 ```bash
-sudo mkdir -p /opt/driver-vedirect && sudo chown renewvan /opt/driver-vedirect
+sudo mkdir -p /opt/driver-vedirect && sudo chown "$USER" /opt/driver-vedirect
 git clone https://github.com/renewvan/driver-vedirect /opt/driver-vedirect
 cd /opt/driver-vedirect && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cp config.ini.example config.ini   # set [mqtt] host and [serial] port_globs
-sudo cp driver_vedirect/systemd/driver-vedirect.service /etc/systemd/system/
+sed "s|@SERVICE_USER@|$(whoami)|" driver_vedirect/systemd/driver-vedirect.service \
+  | sudo tee /etc/systemd/system/driver-vedirect.service >/dev/null
 sudo systemctl daemon-reload && sudo systemctl enable --now driver-vedirect
 ```
 
 The unit runs `python -m driver_vedirect.main` (the same `run()` and discovery as the
-container), as `User=renewvan` (the same as `driver-tank`; change it to the Pi's login user) with
+container), as the Pi's login user (the unit ships `User=@SERVICE_USER@`, filled in by the `sed` above, as in
+the hub's plugins) with
 `SupplementaryGroups=dialout` for access to `/dev/ttyUSB*`. `Restart=on-failure`.
 
 ### Container

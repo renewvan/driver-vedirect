@@ -9,7 +9,7 @@ WorkingDirectory=/opt/driver-vedirect
 ExecStart=/opt/driver-vedirect/.venv/bin/python -m driver_vedirect.main --config /opt/driver-vedirect/config.ini
 Restart=on-failure
 RestartSec=5
-User=renewvan
+User=@SERVICE_USER@
 # Read access to the VE.Direct USB serial ports (ttyUSB*, ttyACM*).
 SupplementaryGroups=dialout
 
