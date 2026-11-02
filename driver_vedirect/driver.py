@@ -60,7 +60,7 @@ class Driver:
         self._last_err: dict[str, str] = {}
         # (entity, published id) -> lookup (serial / interface tail) that owns it: first seen wins
         self._owners: dict[tuple[str, str], str] = {}
-        self._refused: set[tuple[str, str]] = set()
+        self._refused: set[tuple[str, str, str]] = set()
         self._merged: dict[str | int, dict[str, str]] = {}  # per port: PID-less (history) blocks
         self._reported_bad = 0
         self._closed_bad = 0

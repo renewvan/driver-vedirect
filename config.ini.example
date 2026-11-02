@@ -14,3 +14,9 @@ host = 192.168.1.10
 ; Relabel one instance; the key is the lowercased SER# or the interface tail (e.g. if02).
 ; [device.if02]
 ; name = House battery
+
+; Choose the topic instance id too (renewvan/battery/house/...); a-z, 0-9, - and _ only, unique.
+; Changing it later splits logger history. The key above stays the lookup.
+; [device.if02]
+; id = house
+; name = House battery

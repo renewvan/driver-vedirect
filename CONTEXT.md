@@ -11,7 +11,8 @@ The VE.Direct product id (`0xA056`), mapped to an entity and model in `pids.json
 **Instance id**:
 The `<id>` in `renewvan/<entity>/<id>/...`. The lowercased `SER#` of the device; a SmartShunt
 sends none, so it is the by-id interface tail of its port (`...-if02-port0` becomes `if02`), and
-failing that the `[device] id` fallback. Two serial-less shunts must therefore sit on distinct
+failing that the `[device] id` fallback. May be overridden per device by the `id` alias
+(`[device.<lookup>] id = house`), which then replaces it in every topic. Two serial-less shunts must therefore sit on distinct
 `ifNN` adapter ports, or they would share one id.
 
 **Supervisor**:

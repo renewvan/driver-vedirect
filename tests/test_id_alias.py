@@ -10,7 +10,7 @@ from jsonschema import Draft7Validator
 from driver_vedirect.config import load_config
 from driver_vedirect.driver import STALE_AFTER_S, Driver
 from tests import test_shunt_capture as shunt
-from tests.test_chargers import FakePort, FakePublisher, blue, block, make_config
+from tests.test_chargers import FakePort, FakePublisher, blue
 from tests.test_solar_capture import FakeClock
 
 SCHEMAS = Path(__file__).parent / "fixtures" / "schema"
@@ -98,7 +98,7 @@ def test_alias_allows_lowercase_digits_dash_underscore(tmp_path):
 
 def test_two_sections_with_the_same_alias_are_rejected_naming_both(tmp_path):
     text = "[device.hq1]\nid = house\n[device.IF02]\nid = house\n"
-    with pytest.raises(ValueError, match=r"house.*hq1.*if02|house.*if02.*hq1"):
+    with pytest.raises(ValueError, match=r"house.*device\.hq1.*device\.IF02"):
         config_from(tmp_path, text)
 
 
@@ -115,7 +115,9 @@ def test_alias_colliding_with_another_devices_real_id_refuses_the_second(tmp_pat
         driver.poll(FakePort(blue(**{"SER#": "HQ2"}, V="99000")))
         driver.poll(FakePort(blue(**{"SER#": "HQ1"})))
 
-    assert publisher.instance("renewvan/charger/hq2")["voltage_v"] == pytest.approx(13.29, abs=0.011)
+    assert publisher.instance("renewvan/charger/hq2")["voltage_v"] == pytest.approx(
+        13.29, abs=0.011
+    )
     errors = [r for r in caplog.records if r.levelname == "ERROR"]
     assert len(errors) == 1 and "hq2" in errors[0].getMessage()
 

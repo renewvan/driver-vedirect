@@ -144,6 +144,25 @@ until checked on the van:
 | `[serial]` `backoff_min_s`         | `1.0`                             | first retry delay for a port that fails |
 | `[serial]` `backoff_max_s`         | `30.0`                            | the doubling stops here |
 | `[device.<id>]` `name`             |                                   | relabel one instance; `<id>` is the lowercased `SER#` or the interface tail (`if02`), any case |
+| `[device.<id>]` `id`               |                                   | publish that device as `renewvan/<entity>/<this id>/...` instead of its serial / interface tail; one topic segment of `a-z`, `0-9`, `-`, `_`; unique across sections |
+
+Example: give the SmartShunt on adapter port `if02` a friendly topic and label.
+
+```ini
+[device.if02]
+id = house
+name = House battery
+```
+
+It now publishes `renewvan/battery/house/...` (the lookup key stays `if02`; `name` is independent).
+An invalid or duplicated `id` makes the Driver refuse to start with a message naming the section(s).
+If an alias equals another device's real id of the same entity (say `id = hq2` while a charger
+with serial `HQ2` exists), the device seen first keeps the id; the other one gets one ERROR in the
+log and nothing is published for it, while the Driver keeps running.
+
+**Changing an `id` later splits history.** Loggers key their history by topic, so the old id's
+data stays under the old name and the new id starts a fresh series. Pick ids once. The old
+retained topics are not cleared; remove them from the broker by hand.
 
 **Confirm `port_globs` on the Pi.** The van uses one Duppa quad-port adapter. The default includes
 `usb-Duppa_srl_*`, matching the by-id name seen in the SmartShunt capture
