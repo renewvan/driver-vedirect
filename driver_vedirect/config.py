@@ -34,14 +34,24 @@ class MqttConfig:
 class DeviceConfig:
     id: str  # topic path segment, e.g. renewvan/vedirect/<id>/...
     update_interval_ms: int
-    port: str = "/dev/ttyUSB0"
     baud: int = 19200
+
+
+@dataclass(frozen=True)
+class SerialConfig:
+    """Where to look for VE.Direct cables and how to recover when one goes away."""
+
+    by_id_dir: str = "/dev/serial/by-id"
+    port_globs: tuple[str, ...] = ("usb-VictronEnergy_*", "usb-FTDI_*")
+    backoff_min_s: float = 1.0
+    backoff_max_s: float = 30.0
 
 
 @dataclass(frozen=True)
 class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
+    serial: SerialConfig = field(default_factory=SerialConfig)
     # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
     device_names: dict[str, str] = field(default_factory=dict)
 
@@ -59,6 +69,8 @@ def load_config(
 
     mqtt = parser["mqtt"]
     device = parser["device"]
+    serial = parser["serial"]
+    globs = tuple(g.strip() for g in serial.get("port_globs", "").split(",") if g.strip())
 
     device_names = {
         name[len("device.") :].lower(): section["name"]
@@ -79,8 +91,13 @@ def load_config(
         device=DeviceConfig(
             id=device.get("id", "vedirect"),
             update_interval_ms=device.getint("update_interval_ms", 3000),
-            port=device.get("port", "/dev/ttyUSB0"),
             baud=device.getint("baud", 19200),
+        ),
+        serial=SerialConfig(
+            by_id_dir=serial.get("by_id_dir", "/dev/serial/by-id"),
+            port_globs=globs,
+            backoff_min_s=serial.getfloat("backoff_min_s", 1.0),
+            backoff_max_s=serial.getfloat("backoff_max_s", 30.0),
         ),
         device_names=device_names,
     )

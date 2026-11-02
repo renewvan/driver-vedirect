@@ -47,24 +47,43 @@ class Driver:
         self._publisher = publisher
         self._config = config
         self._clock = clock
-        self._parser = FrameParser()
+        self._parsers: dict[str, FrameParser] = {}
         self._identified: set[str] = set()
         # (entity, id) -> [last valid frame time, live properties currently published]
         self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
         self._warned_pids: set[str] = set()
-        self._warned_ports: set[int] = set()
+        self._warned_ports: set[str | int] = set()
         self._noted_unverified: set[str] = set()
         self._last_err: dict[str, str] = {}
         self._merged: dict[str, str] = {}  # PID-less (shunt history) blocks, merged by key
         self._reported_bad = 0
+        self._closed_bad = 0
         self._last_bad_report = float("-inf")
 
-    def poll(self, port) -> None:  # noqa: ANN001 - any object with read(size) -> bytes
-        """Read one chunk from the port and publish whatever complete blocks it finishes."""
-        for fields in self._parser.feed(port.read(4096)):
-            self._handle(fields, port)
+    def poll(self, port, key: str = "") -> bool:  # noqa: ANN001 - any object with read(size)
+        """Read one chunk from the port and publish whatever complete blocks it finishes.
+
+        `key` names the port (its by-id path) so each keeps its own half-read frame. Returns
+        True when the port delivered any bytes. A failing read raises OSError to the caller.
+        """
+        key = key or getattr(port, "name", "")
+        parser = self._parsers.setdefault(key, FrameParser())
+        data = port.read(4096)
+        for fields in parser.feed(data):
+            self._handle(fields, key or id(port))
         self._clear_stale()
         self._report_bad_frames()
+        return bool(data)
+
+    def tick(self) -> None:
+        """Time-driven work that must run even when no port is open (staleness clearing)."""
+        self._clear_stale()
+
+    def forget_port(self, key: str) -> None:
+        """Drop a port's partial frame (it was closed); counters stay in the totals."""
+        parser = self._parsers.pop(key, None)
+        if parser is not None:
+            self._closed_bad += parser.bad_frames
 
     def _clear_stale(self) -> None:
         """Entity-generic: empty retained payloads for the live props of a silent device."""
@@ -78,13 +97,14 @@ class Driver:
     def _report_bad_frames(self) -> None:
         """Rate-limited (once per minute) warning for blocks dropped on a bad checksum."""
         now = self._clock()
-        dropped = self._parser.bad_frames - self._reported_bad
+        total = self._closed_bad + sum(p.bad_frames for p in self._parsers.values())
+        dropped = total - self._reported_bad
         if dropped and now - self._last_bad_report >= BAD_FRAME_LOG_INTERVAL_S:
             logger.warning("Dropped %d VE.Direct block(s) with a bad checksum", dropped)
             self._reported_bad += dropped
             self._last_bad_report = now
 
-    def _handle(self, fields: dict[str, str], port) -> None:  # noqa: ANN001
+    def _handle(self, fields: dict[str, str], port_key: str | int) -> None:
         # The shunt alternates a live block (PID) and an H1..H18 history block (no PID); the
         # history is folded in by key so neither block overwrites the other.
         if "PID" not in fields:
@@ -95,8 +115,8 @@ class Driver:
         if device is None:
             device = pids.classify(fields)
         if device is None:
-            if id(port) not in self._warned_ports:
-                self._warned_ports.add(id(port))
+            if port_key not in self._warned_ports:
+                self._warned_ports.add(port_key)
                 logger.warning(
                     "Unrecognized VE.Direct device (PID %s) with fields %s; publishing nothing",
                     pid,
@@ -111,7 +131,7 @@ class Driver:
             fields = {**self._merged, **fields}
         serial = fields.get("SER#", "").lower()
         if not serial and entity == "battery":  # the SmartShunt: its adapter port names it
-            match = _INTERFACE_TAIL.search(getattr(port, "name", ""))
+            match = _INTERFACE_TAIL.search(port_key if isinstance(port_key, str) else "")
             serial = match.group(1) if match else self._config.device.id
         if not serial or entity not in ("solar", "charger", "battery"):
             return  # serial-less devices other than the shunt are not published
@@ -155,18 +175,18 @@ class Driver:
 def run(config: AppConfig) -> None:
     import serial  # imported here so tests need no serial stack
 
+    from driver_vedirect.discovery import Supervisor, run_loop
+
     # Board serial is read once, here: Publisher republishes this same payload on every reconnect.
     info_payload = build_info_payload(env=os.environ, cpuinfo_path=Path("/proc/cpuinfo"))
     publisher = Publisher(config.mqtt, info_payload)
     publisher.connect()
-    # Read-only: the port is only ever read from. Port discovery and reconnects are a later ticket.
-    port = serial.Serial(config.device.port, config.device.baud, timeout=1)
-    driver = Driver(publisher, config)
+
+    def open_port(path: str, baud: int):  # read-only use; timeout=0 keeps reads non-blocking
+        return serial.Serial(path, baud, timeout=0)
+
+    supervisor = Supervisor(Driver(publisher, config), config, time.monotonic, open_port)
     try:
-        while True:
-            driver.poll(port)
-    except KeyboardInterrupt:
-        logger.info("Shutting down")
+        run_loop(supervisor)
     finally:
-        port.close()
         publisher.disconnect()
