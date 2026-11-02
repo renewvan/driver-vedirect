@@ -153,9 +153,12 @@ class Driver:
             "charger": mapping.map_charger,
             "battery": mapping.map_battery,
         }.get(entity, mapping.map_solar)
+        values = mapper(fields)
+        if not values:  # nothing readable: the block does not prove the device is alive
+            return
         live = self._seen.setdefault((entity, serial), (0.0, set()))[1]
         self._seen[(entity, serial)] = (self._clock(), live)
-        for prop, value in mapper(fields).items():
+        for prop, value in values.items():
             if value is None:  # no estimate / no probe (TTG -1, T ---): clear an earlier value
                 if prop in live:
                     self._publisher.publish(_topic(entity, serial, prop), "")

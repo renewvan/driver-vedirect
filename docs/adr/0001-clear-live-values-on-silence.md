@@ -16,5 +16,5 @@ After 10 s without a valid frame for a device, the Driver publishes an empty ret
 
 ## Consequences
 
-- A shunt's alternating live and history blocks both count as valid frames; a device that only sends corrupt blocks is treated as silent.
+- Only live blocks count: those that carry a PID, are attributed to a device and map to at least one value. A shunt's PID-less history (H1..H18) blocks carry no device id, so they do not refresh the timer. A device that only sends corrupt or unreadable blocks is treated as silent.
 - The threshold is a constant (`STALE_AFTER_S`), not configuration; change it with a new ADR if a device with a slower cadence is added.

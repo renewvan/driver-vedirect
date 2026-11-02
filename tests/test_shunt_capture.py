@@ -149,3 +149,17 @@ def test_identity_is_republished_after_an_mqtt_reconnect_but_not_before():
     driver.poll(NamedPort(live()))
     assert publisher.instance(BASE)["name"] == "SmartShunt"
     assert publisher.instance(BASE)["driver"] == "vedirect"
+
+
+def test_a_block_whose_fields_all_fail_to_parse_does_not_keep_old_values_live():
+    publisher = FakePublisher()
+    clock = FakeClock()
+    driver = Driver(publisher, make_config(), clock=clock)
+    driver.poll(NamedPort(live()))
+    clock.now += 6
+    driver.poll(NamedPort(live(V="x", I="x", P="x", SOC="x", TTG="x")))
+    clock.now += 6  # 12 s after the last block that produced a value
+
+    driver.tick()
+
+    assert "power_w" not in publisher.instance(BASE)
