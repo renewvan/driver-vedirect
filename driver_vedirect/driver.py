@@ -75,6 +75,11 @@ class Driver:
         self._report_bad_frames()
         return bool(data)
 
+    def on_mqtt_connect(self) -> None:
+        """Called on every (re)connect: identity is retained state a restarted broker may have
+        lost, so it is published again with the next valid block of each device."""
+        self._identified.clear()
+
     def tick(self) -> None:
         """Time-driven work that must run even when no port is open (staleness clearing)."""
         self._clear_stale()
@@ -179,13 +184,14 @@ def run(config: AppConfig) -> None:
 
     # Board serial is read once, here: Publisher republishes this same payload on every reconnect.
     info_payload = build_info_payload(env=os.environ, cpuinfo_path=Path("/proc/cpuinfo"))
-    publisher = Publisher(config.mqtt, info_payload)
+    driver = Driver(publisher := Publisher(config.mqtt, info_payload), config)
+    publisher.on_connect_hook = driver.on_mqtt_connect
     publisher.connect()
 
     def open_port(path: str, baud: int):  # read-only use; timeout=0 keeps reads non-blocking
         return serial.Serial(path, baud, timeout=0)
 
-    supervisor = Supervisor(Driver(publisher, config), config, time.monotonic, open_port)
+    supervisor = Supervisor(driver, config, time.monotonic, open_port)
     try:
         run_loop(supervisor)
     finally:

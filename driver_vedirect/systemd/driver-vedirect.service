@@ -1,5 +1,5 @@
 [Unit]
-Description=driver-vedirect MQTT device
+Description=driver-vedirect MQTT driver
 After=network-online.target
 Wants=network-online.target
 
@@ -10,6 +10,8 @@ ExecStart=/opt/driver-vedirect/.venv/bin/python -m driver_vedirect.main --config
 Restart=on-failure
 RestartSec=5
 User=renewvan
+# Read access to the VE.Direct USB serial ports (ttyUSB*, ttyACM*).
+SupplementaryGroups=dialout
 
 [Install]
 WantedBy=multi-user.target

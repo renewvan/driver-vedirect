@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://renewvan.dev/schema/driver-manifest.schema.json",
+  "title": "driver-manifest",
+  "description": "The manifest.json shipped at the root of each Driver repo: the static description of one Driver (not a Pi-host plugin, and not driver-demo). It is the single source of the static fields; a Driver adds its build-stamped version and the Board serial at runtime and publishes the result as Driver info (see driver-info.schema.json). version and board_serial are FORBIDDEN here so a hand-edited version can never disagree with the release tag. Home Assistant field mapping, for anyone bridging Driver info to an HA device block (documented here only; nothing HA-shaped goes on the wire): product -> model, version -> sw_version, board_serial -> serial_number, homepage -> configuration_url, driver -> identifiers. board_serial formats seen so far: a Raspberry Pi SoC serial, the Serial line of /proc/cpuinfo (16 hex digits, e.g. 10000000abcdef01; an all-zero or empty value is treated as absent), and an ESP32 MAC address as AA:BB:CC:DD:EE:FF. Every Driver repo's CI validates manifest.json against this schema fetched from the hub repo at a pinned ref; schema/validate-examples.sh fails when an entity schema exists that the publishes enum does not list.",
+  "type": "object",
+  "required": ["driver", "product", "source", "publishes"],
+  "additionalProperties": false,
+  "properties": {
+    "driver": {
+      "type": "string",
+      "pattern": "^(?!driver-)(?!demo$)[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "The Driver's key: the topic segment in renewvan/<driver>/info and renewvan/<driver>/health, and the Home Assistant device identifier. A lowercase slug with no driver- prefix (repo renewvan/driver-venus is driver 'venus'). The reserved key 'demo' is rejected: it is the Demo namespace root, never a Driver."
+    },
+    "product": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable product name shown as the Driver's title (Home Assistant: model)."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the Driver reads: the hardware or feed it senses or remaps (e.g. 'Victron Venus OS MQTT feed', 'ADS1115 resistive sender')."
+    },
+    "publishes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "battery",
+          "charger",
+          "gps",
+          "relay",
+          "router",
+          "solar",
+          "tank",
+          "temperature",
+          "tilt"
+        ]
+      },
+      "description": "Entity types the Driver publishes. A static enum kept in sync with the entity schemas under schema/ by schema/validate-examples.sh: adding an entity schema without listing it here fails that script (in both this schema and driver-info.schema.json)."
+    },
+    "manufacturer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional. Who makes the Driver. Consumers show 'renewvan' when Driver info exists without one."
+    },
+    "homepage": {
+      "type": "string",
+      "pattern": "^https?://\\S+$",
+      "description": "Optional. Project or product URL (Home Assistant: configuration_url)."
+    }
+  }
+}

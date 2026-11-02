@@ -6,3 +6,7 @@
 
 [mqtt]
 host = 192.168.1.10
+
+[serial]
+; Check `ls /dev/serial/by-id` on the Pi: the default port_globs are a guess for the Duppa quad adapter.
+; port_globs = usb-Duppa_srl_*, usb-VictronEnergy_*
