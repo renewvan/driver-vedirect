@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -48,7 +49,10 @@ class Driver:
         self._config = config
         self._clock = clock
         self._parsers: dict[str | int, FrameParser] = {}
-        self._identified: set[str] = set()
+        # (entity, id) -> identity properties already published. Touched by the main loop and, on
+        # a reconnect, by paho's network thread, so every access holds `_identity_lock`.
+        self._identity: dict[tuple[str, str], dict[str, str]] = {}
+        self._identity_lock = threading.Lock()
         # (entity, id) -> [last valid frame time, live properties currently published]
         self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
         self._warned_pids: set[str] = set()
@@ -76,9 +80,12 @@ class Driver:
         return bool(data)
 
     def on_mqtt_connect(self) -> None:
-        """Called on every (re)connect: identity is retained state a restarted broker may have
-        lost, so it is published again with the next valid block of each device."""
-        self._identified.clear()
+        """Called on every (re)connect, from paho's thread: identity is retained state a restarted
+        broker may have lost, so it is published again for every known instance right away."""
+        with self._identity_lock:
+            for (entity, device_id), props in self._identity.items():
+                for prop, value in props.items():
+                    self._publish(entity, device_id, prop, value)
 
     def tick(self) -> None:
         """Time-driven work that must run even when no port is open (staleness clearing)."""
@@ -144,13 +151,17 @@ class Driver:
             return  # serial-less devices other than the shunt are not published
         if entity == "charger":
             self._log_err_change(serial, fields)
-        if serial not in self._identified:
-            self._identified.add(serial)
-            self._publish(entity, serial, "driver", DRIVER_KEY)
-            name = self._config.device_names.get(serial, device["model"])
-            self._publish(entity, serial, "name", name)
-            if "source" in device:
-                self._publish(entity, serial, "source", device["source"])
+        with self._identity_lock:
+            if (entity, serial) not in self._identity:
+                props = {
+                    "driver": DRIVER_KEY,
+                    "name": self._config.device_names.get(serial, device["model"]),
+                }
+                if "source" in device:
+                    props["source"] = device["source"]
+                self._identity[(entity, serial)] = props
+                for prop, value in props.items():
+                    self._publish(entity, serial, prop, value)
         mapper = {
             "charger": mapping.map_charger,
             "battery": mapping.map_battery,

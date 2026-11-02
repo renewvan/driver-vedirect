@@ -136,7 +136,7 @@ def test_device_section_named_by_interface_tail_sets_the_name(tmp_path):
     assert play(live(), config=config).instance(BASE)["name"] == "House battery"
 
 
-def test_identity_is_republished_after_an_mqtt_reconnect_but_not_before():
+def test_identity_is_republished_at_once_on_an_mqtt_reconnect_but_not_before():
     publisher = FakePublisher()
     driver = Driver(publisher, make_config(), clock=FakeClock())
     driver.poll(NamedPort(live()))
@@ -145,8 +145,7 @@ def test_identity_is_republished_after_an_mqtt_reconnect_but_not_before():
     driver.poll(NamedPort(live()))
     assert f"{BASE}/name" not in publisher.retained  # same session: identity is not repeated
 
-    driver.on_mqtt_connect()
-    driver.poll(NamedPort(live()))
+    driver.on_mqtt_connect()  # immediately, without waiting for the next block
     assert publisher.instance(BASE)["name"] == "SmartShunt"
     assert publisher.instance(BASE)["driver"] == "vedirect"
 
