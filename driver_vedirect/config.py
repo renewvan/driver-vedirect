@@ -52,6 +52,8 @@ class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
     serial: SerialConfig = field(default_factory=SerialConfig)
+    # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
+    device_names: dict[str, str] = field(default_factory=dict)
 
 
 def load_config(
@@ -69,6 +71,12 @@ def load_config(
     device = parser["device"]
     serial = parser["serial"]
     globs = tuple(g.strip() for g in serial.get("port_globs", "").split(",") if g.strip())
+
+    device_names = {
+        name[len("device.") :].lower(): section["name"]
+        for name, section in parser.items()
+        if name.startswith("device.") and section.get("name")
+    }
 
     return AppConfig(
         mqtt=MqttConfig(
@@ -91,4 +99,5 @@ def load_config(
             backoff_min_s=serial.getfloat("backoff_min_s", 1.0),
             backoff_max_s=serial.getfloat("backoff_max_s", 30.0),
         ),
+        device_names=device_names,
     )

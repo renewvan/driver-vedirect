@@ -28,3 +28,20 @@ def lookup(pid: str) -> dict | None:
         if low <= value <= high:
             return info
     return None
+
+
+def classify(fields: dict[str, str]) -> dict | None:
+    """Classify a device with an unknown PID by its fields; None when it is ambiguous.
+
+    Rules apply in order: PV fields -> solar; DC_IN_V -> alternator charger; BMV, or SOC with CE
+    -> battery; V + I + CS with none of the above -> AC charger.
+    """
+    if "VPV" in fields or "PPV" in fields:
+        return {"entity": "solar", "model": "Victron solar"}
+    if "DC_IN_V" in fields:
+        return {"entity": "charger", "source": "alternator", "model": "Victron charger"}
+    if "BMV" in fields or ("SOC" in fields and "CE" in fields):
+        return {"entity": "battery", "model": "Victron battery monitor"}
+    if {"V", "I", "CS"} <= fields.keys():
+        return {"entity": "charger", "source": "ac", "model": "Victron charger"}
+    return None

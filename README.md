@@ -28,6 +28,23 @@ not a primary source (`"verified": false`).
 | `yield_today_wh`    | `H20` (0.01 kWh)                         | live     |
 | `charge_state`      | `CS`, same table as driver-venus         | live     |
 
+`renewvan/charger/<serial>/<property>`: the Orion XS (`source` `alternator`) and Blue Smart AC
+charger (`source` `ac`).
+
+| Property          | Source                                              | Kind     |
+| ----------------- | --------------------------------------------------- | -------- |
+| `driver`, `name`, `source` | Driver key, PID table model (or `[device.<serial>] name`), PID table | identity |
+| `voltage_v`       | `V` (mV)                                            | live     |
+| `current_a`       | `I` (mA)                                            | live     |
+| `power_w`         | `P` (W) when sent, else derived `V x I` (Blue Smart, and Orion XS without `P`) | live |
+| `input_voltage_v` | `DC_IN_V` (0.01 V), Orion XS only                   | live     |
+| `charge_state`    | `CS`, same table as driver-venus                    | live     |
+
+The Blue Smart frames (PID 0xA330, unverified) contain FWE, SER#, V, I, T, ERR, CS and HC#; no P,
+VPV or DC_IN_*. `T ---` leaves `temperature_c` absent (the charger schema has none), `HC#` is
+ignored, and `ERR` is logged once per change. `[device.<serial>]` in `config.ini` (serial in
+either case) accepts `name = ...` to relabel an instance.
+
 Frames with a bad checksum are dropped; HEX messages interleaved with text blocks are ignored.
 
 ## Wiring

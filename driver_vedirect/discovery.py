@@ -60,6 +60,7 @@ class Supervisor:
             if slot.port is None and not self._open(path, slot):
                 continue
             got_data |= self._poll(path, slot)
+        self._driver.tick()
         return got_data
 
     def close(self) -> None:

@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 # `renewvan/<key>/info` segment. Entity instances name it on `renewvan/vedirect/<id>/driver`.
 DRIVER_KEY = "vedirect"
 BAD_FRAME_LOG_INTERVAL_S = 60.0
+# Silence is an invalid reading (hub ADR 0008): see docs/adr/0001-clear-live-values-on-silence.md.
+STALE_AFTER_S = 10.0
 
 
 def _topic(entity: str, device_id: str, prop: str) -> str:
@@ -42,7 +44,12 @@ class Driver:
         self._clock = clock
         self._parsers: dict[str, FrameParser] = {}
         self._identified: set[str] = set()
+        # (entity, id) -> [last valid frame time, live properties currently published]
+        self._seen: dict[tuple[str, str], tuple[float, set[str]]] = {}
         self._warned_pids: set[str] = set()
+        self._warned_ports: set[str | int] = set()
+        self._noted_unverified: set[str] = set()
+        self._last_err: dict[str, str] = {}
         self._reported_bad = 0
         self._closed_bad = 0
         self._last_bad_report = float("-inf")
@@ -56,15 +63,29 @@ class Driver:
         parser = self._parsers.setdefault(key, FrameParser())
         data = port.read(4096)
         for fields in parser.feed(data):
-            self._handle(fields)
+            self._handle(fields, key or id(port))
+        self._clear_stale()
         self._report_bad_frames()
         return bool(data)
+
+    def tick(self) -> None:
+        """Time-driven work that must run even when no port is open (staleness clearing)."""
+        self._clear_stale()
 
     def forget_port(self, key: str) -> None:
         """Drop a port's partial frame (it was closed); counters stay in the totals."""
         parser = self._parsers.pop(key, None)
         if parser is not None:
             self._closed_bad += parser.bad_frames
+
+    def _clear_stale(self) -> None:
+        """Entity-generic: empty retained payloads for the live props of a silent device."""
+        now = self._clock()
+        for (entity, device_id), (last, live) in self._seen.items():
+            if live and now - last >= STALE_AFTER_S:
+                for prop in sorted(live):
+                    self._publisher.publish(_topic(entity, device_id, prop), "")
+                live.clear()
 
     def _report_bad_frames(self) -> None:
         """Rate-limited (once per minute) warning for blocks dropped on a bad checksum."""
@@ -76,23 +97,51 @@ class Driver:
             self._reported_bad += dropped
             self._last_bad_report = now
 
-    def _handle(self, fields: dict[str, str]) -> None:
+    def _handle(self, fields: dict[str, str], port_key: str | int) -> None:
         pid = fields.get("PID", "")
         device = pids.lookup(pid)
         if device is None:
-            if pid not in self._warned_pids:
-                self._warned_pids.add(pid)
-                logger.warning("Unknown VE.Direct PID %s with fields %s", pid, sorted(fields))
+            device = pids.classify(fields)
+        if device is None:
+            if port_key not in self._warned_ports:
+                self._warned_ports.add(port_key)
+                logger.warning(
+                    "Unrecognized VE.Direct device (PID %s) with fields %s; publishing nothing",
+                    pid,
+                    sorted(fields),
+                )
             return
+        if device.get("verified") is False and pid not in self._noted_unverified:
+            self._noted_unverified.add(pid)
+            logger.info("First sight of unverified VE.Direct PID %s (%s)", pid, device["model"])
         serial = fields.get("SER#", "").lower()
-        if not serial or device["entity"] != "solar":
+        entity = device["entity"]
+        if not serial or entity not in ("solar", "charger"):
             return  # other entities and serial-less devices arrive in later tickets
+        if entity == "charger":
+            self._log_err_change(serial, fields)
         if serial not in self._identified:
             self._identified.add(serial)
-            self._publish("solar", serial, "driver", DRIVER_KEY)
-            self._publish("solar", serial, "name", device["model"])
-        for prop, value in mapping.map_solar(fields).items():
-            self._publish("solar", serial, prop, value)
+            self._publish(entity, serial, "driver", DRIVER_KEY)
+            name = self._config.device_names.get(serial, device["model"])
+            self._publish(entity, serial, "name", name)
+            if "source" in device:
+                self._publish(entity, serial, "source", device["source"])
+        mapper = mapping.map_charger if entity == "charger" else mapping.map_solar
+        live = self._seen.setdefault((entity, serial), (0.0, set()))[1]
+        self._seen[(entity, serial)] = (self._clock(), live)
+        for prop, value in mapper(fields).items():
+            self._publish(entity, serial, prop, value)
+            live.add(prop)
+
+    def _log_err_change(self, serial: str, fields: dict[str, str]) -> None:
+        err = fields.get("ERR")
+        if err is None:
+            return
+        previous = self._last_err.get(serial, "0")  # a healthy first reading is not news
+        self._last_err[serial] = err
+        if err != previous:
+            logger.warning("Charger %s ERR changed %s -> %s", serial, previous, err)
 
     def _publish(self, entity: str, device_id: str, prop: str, value: object) -> None:
         self._publisher.publish(_topic(entity, device_id, prop), json.dumps(value))

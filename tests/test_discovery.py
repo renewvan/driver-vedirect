@@ -179,3 +179,18 @@ def test_a_port_that_leaves_the_directory_is_closed_and_forgotten():
     supervisor.step()
 
     assert port.closed
+
+
+def test_values_of_a_fully_unplugged_adapter_still_go_stale():
+    world = FakeSerialWorld()
+    name = "usb-VE_a-if00-port0"
+    world.plug(name, solar_block("HQ1", power=10))
+    supervisor, pub, clock = make(world)
+    supervisor.step()
+
+    del world.plugged[name]
+    clock.now += 11
+    supervisor.step()
+
+    assert pub.retained["renewvan/solar/hq1/power_w"] == ""
+    assert pub.get("renewvan/solar/hq1/driver") == "vedirect"
