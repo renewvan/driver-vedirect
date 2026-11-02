@@ -1,0 +1,10 @@
+{
+ "renewvan/battery/290/capacity_ah": 314.0,
+ "renewvan/battery/290/charge_state": "bulk",
+ "renewvan/battery/290/current_a": 0.8629999756813049,
+ "renewvan/battery/290/power_w": 11.0,
+ "renewvan/battery/290/remaining_ah": 200.434,
+ "renewvan/battery/290/soc_pct": 67.9000015258789,
+ "renewvan/battery/290/time_since_full_charge_s": 693633,
+ "renewvan/battery/290/voltage_v": 13.321000099182129
+}

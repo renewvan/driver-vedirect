@@ -69,15 +69,24 @@ def test_dc_in_v_is_classified_not_unrecognized(caplog):
 
     assert unrecognized(caplog) == []
     assert publisher.instance("renewvan/solar/hq0000orion") == {}
+    charger = publisher.instance("renewvan/charger/hq0000orion")
+    assert charger["source"] == "alternator"
+    assert charger["voltage_v"] == 13.2
+    assert charger["input_voltage_v"] == 14.2
 
 
 def test_bmv_or_soc_with_ce_is_classified_battery(caplog):
     by_bmv = [("PID", "0xFFFD"), ("BMV", "700"), ("V", "12800")]
     by_soc = [("PID", "0xFFFC"), ("SOC", "950"), ("CE", "-1200"), ("V", "12800")]
     with caplog.at_level("INFO"):
-        run(block(by_bmv), block(by_soc))
+        by_bmv_published, _ = run(block(by_bmv))
+        by_soc_published, _ = run(block(by_soc))
 
     assert unrecognized(caplog) == []
+    assert by_bmv_published.instance("renewvan/battery/vedirect")["voltage_v"] == 12.8
+    battery = by_soc_published.instance("renewvan/battery/vedirect")
+    assert battery["soc_pct"] == 95.0
+    assert battery["voltage_v"] == 12.8
 
 
 def test_soc_alone_is_not_enough_for_a_battery(caplog):
@@ -90,9 +99,14 @@ def test_soc_alone_is_not_enough_for_a_battery(caplog):
 def test_v_i_cs_without_other_markers_is_classified_charger(caplog):
     blue = [("PID", "0xFFFA"), ("SER#", "HQ0000AC"), ("V", "13800"), ("I", "5000"), ("CS", "4")]
     with caplog.at_level("INFO"):
-        run(block(blue))
+        publisher, _ = run(block(blue))
 
     assert unrecognized(caplog) == []
+    charger = publisher.instance("renewvan/charger/hq0000ac")
+    assert charger["source"] == "ac"
+    assert charger["voltage_v"] == 13.8
+    assert charger["current_a"] == 5.0
+    assert charger["charge_state"] == "absorption"
 
 
 def test_v_i_without_cs_is_unrecognized(caplog):
