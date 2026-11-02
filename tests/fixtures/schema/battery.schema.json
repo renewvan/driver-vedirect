@@ -1,0 +1,173 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://renewvan.dev/schema/battery.schema.json",
+  "title": "battery",
+  "description": "v0.2 device-model entity: a battery bank as seen by a shunt, BMS, or inverter-charger, regardless of vendor. Published under renewvan/battery/<id>/<property>. The four core measurements are required of every source; everything else is optional because not every source can supply it (a shunt has no charge stage, a BMS-less lead-acid bank has no temperature probe). Consumers MUST tolerate absent optional properties.",
+  "type": "object",
+  "properties": {
+    "driver": {
+      "type": "string",
+      "pattern": "^(?!driver-)(?!demo$)[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+      "description": "Optional, retained. The key of the Driver publishing this instance: the <driver> segment of renewvan/<driver>/info, published as renewvan/battery/<id>/driver. Same slug rule as driver-info.schema.json. Identity field. A consumer must tolerate it being absent (a Driver that predates it) and then attributes the instance to every Driver whose info `publishes` lists 'battery'."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional, retained. Human-readable label of this instance (e.g. 'House battery'), published as renewvan/battery/<id>/name. Identity field."
+    },
+    "soc_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "voltage_v": {
+      "type": "number",
+      "minimum": 0
+    },
+    "current_a": {
+      "type": "number",
+      "description": "Signed: positive = charging, negative = discharging."
+    },
+    "power_w": {
+      "type": "number",
+      "description": "Signed: positive = charging, negative = discharging."
+    },
+    "capacity_ah": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: nominal/design capacity of the bank in amp-hours, as reported by the source (a BMS reports it from its pack data; a plain shunt does not). Publish the source's own value, not a computed one."
+    },
+    "remaining_ah": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: remaining capacity of the bank in amp-hours, as reported by the source's own fuel gauge (coulomb counting). Pairs with capacity_ah: consumers can cross-check soc_pct against remaining_ah / capacity_ah."
+    },
+    "temperature_c": {
+      "type": "number",
+      "description": "Optional: only sources with a temperature probe publish it."
+    },
+    "temperatures_c": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "type": ["number", "null"] },
+      "description": "Optional, retained: one entry per temperature probe the BMS reports, in the source's own probe order, as one JSON array. `null` is an absent or unreadable probe (never 0); the array keeps its length. Independent of the cells and of temperature_c, which stays the headline reading. Absent when the source reports no probes; replaced wholesale, never merged. See docs/adr/0022-per-cell-bms-data-lives-on-battery.md."
+    },
+    "cell_voltages_v": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "type": ["number", "null"], "minimum": 0 },
+      "description": "Optional, retained: per-cell voltage in volts, as reported by the BMS (a DH04 reports millivolts; publish volts to 3 decimals), as one JSON array. Index i is cell i+1. `null` is a cell that could not be read (never 0); the array keeps its length. The length is the pack's cell count and varies (4 for a 12 V pack, 8 for 24 V). Absent when the cell count is unknown or the source has no cell data; never an empty array, and a silent BMS publishes nothing rather than an array of nulls. Replaced wholesale at its new length when the cell count changes. At most one BMS's cells per instance: never merged across packs. See docs/adr/0022-per-cell-bms-data-lives-on-battery.md."
+    },
+    "cell_voltage_max_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: highest cell voltage in volts. A driver that derives it computes it over the non-null cells of cell_voltages_v (and omits it with fewer than 2), and then publishes cell_voltage_max_v, cell_voltage_min_v and cell_voltage_delta_v together, in the same cycle as cell_voltages_v. A source that reports only some of the three (Venus) publishes what it has, and may publish them without cell_voltages_v (a BMS that reports cell extremes but no per-cell array). A driver that derives them omits them when cell_voltages_v is absent."
+    },
+    "cell_voltage_min_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: lowest cell voltage in volts. Same derivation and publishing rules as cell_voltage_max_v."
+    },
+    "cell_voltage_delta_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: cell_voltage_max_v minus cell_voltage_min_v, in volts. Same derivation and publishing rules as cell_voltage_max_v."
+    },
+    "cell_balancing": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "type": ["boolean", "null"] },
+      "description": "Optional, retained: per-cell balancing state, index-aligned with cell_voltages_v (cell_balancing[i] is cell i+1): true = that cell is being balanced. `null` is unknown, never false. The same length as cell_voltages_v or absent, never padded or truncated; draft-07 cannot express the equal-length rule, so a consumer that sees a length mismatch ignores cell_balancing. See docs/adr/0022-per-cell-bms-data-lives-on-battery.md."
+    },
+    "allow_charge": {
+      "type": "boolean",
+      "description": "Optional, retained: the BMS currently permits charging, as the source reports it (JBD: charge FET on; Venus: Io/AllowToCharge). Published only when the source reports it; never computed. Venus reads an unknown state as 0, so a false from Venus cannot be told apart from 'BMS not reporting'."
+    },
+    "allow_discharge": {
+      "type": "boolean",
+      "description": "Optional, retained: the BMS currently permits discharging, as the source reports it (JBD: discharge FET on; Venus: Io/AllowToDischarge). Same rules as allow_charge."
+    },
+    "protections": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 17,
+      "items": {
+        "type": "string",
+        "enum": [
+          "cell_overvoltage",
+          "cell_undervoltage",
+          "pack_overvoltage",
+          "pack_undervoltage",
+          "charge_overtemperature",
+          "charge_undertemperature",
+          "discharge_overtemperature",
+          "discharge_undertemperature",
+          "charge_overcurrent",
+          "discharge_overcurrent",
+          "short_circuit",
+          "internal_fault",
+          "locked",
+          "cell_imbalance",
+          "overtemperature",
+          "undertemperature",
+          "other"
+        ]
+      },
+      "description": "Optional, retained: the protections the BMS currently has active, as one JSON array in the order of the enum above, no duplicates. An empty array means the source reports protections and none is active; absent means the source does not report them (the one array where [] is valid). JBD protection bits 0-12 map to the first 13 names in order; Venus /Alarms/* map by name and only alarm level 2 counts as active, warnings (1) are ignored. A set bit or alarm with no name here publishes `other`. See docs/adr/0022-per-cell-bms-data-lives-on-battery.md."
+    },
+    "charge_voltage_limit_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: the charge voltage limit the source reports, in volts (Venus Info/MaxChargeVoltage). Source-reported only; a driver never computes it, and driver-wattcycle never publishes it."
+    },
+    "charge_current_limit_a": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: the charge current limit the source reports, in amps (Venus Info/MaxChargeCurrent). Source-reported only; never computed."
+    },
+    "discharge_current_limit_a": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: the discharge current limit the source reports, in amps (Venus Info/MaxDischargeCurrent). Source-reported only; never computed."
+    },
+    "time_to_go_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: estimated seconds until empty at the present discharge rate, as the source reports it (Venus caps this at ~864000 s). Absent only when the source reports no estimate (Venus null)."
+    },
+    "time_since_full_charge_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: seconds since the bank was last fully charged, as tracked by the source."
+    },
+    "charge_state": {
+      "type": "string",
+      "description": "Optional: charge stage of the system that is charging this bank. Only sources that know the stage publish it (e.g. an aggregated charger/system state); a plain shunt does not. `unknown` is the forward-compat fallback for any code not in this enum.",
+      "enum": [
+        "off",
+        "low_power",
+        "fault",
+        "bulk",
+        "absorption",
+        "float",
+        "storage",
+        "equalize",
+        "passthru",
+        "inverting",
+        "assisting",
+        "sustain",
+        "external_control",
+        "discharging",
+        "sustain_ess",
+        "recharge",
+        "scheduled_recharge",
+        "unknown"
+      ]
+    }
+  },
+  "required": ["soc_pct", "voltage_v", "current_a", "power_w"],
+  "additionalProperties": false
+}

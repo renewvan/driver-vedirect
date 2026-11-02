@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import configparser
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -39,9 +39,17 @@ class DeviceConfig:
 
 
 @dataclass(frozen=True)
+class DeviceOverride:
+    """`[device.<id>]` section; <id> is a lowercased SER# or a by-id interface tail (`if02`)."""
+
+    name: str | None = None
+
+
+@dataclass(frozen=True)
 class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
+    devices: dict[str, DeviceOverride] = field(default_factory=dict)
 
 
 def load_config(
@@ -74,4 +82,9 @@ def load_config(
             port=device.get("port", "/dev/ttyUSB0"),
             baud=device.getint("baud", 19200),
         ),
+        devices={
+            name[len("device.") :].lower(): DeviceOverride(name=section.get("name") or None)
+            for name, section in parser.items()
+            if name.startswith("device.")
+        },
     )

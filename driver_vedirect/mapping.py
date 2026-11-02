@@ -51,3 +51,33 @@ def map_solar(fields: dict[str, str]) -> dict[str, object]:
     except ValueError:
         return {}  # a field we cannot read means we do not trust the block
     return out
+
+
+# Venus caps TimeToGo at ~10 days (864000 s); a shunt's 65534 min would otherwise exceed it.
+MAX_TIME_TO_GO_S = 864000
+
+
+def map_battery(fields: dict[str, str]) -> dict[str, object]:
+    """SmartShunt block -> `battery` live properties; `None` means "has no value, clear it".
+
+    `TTG -1` (infinite) and `T ---` (no probe) are None. `charge_state`, `capacity_ah` and
+    `remaining_ah` are deliberately never published (a shunt has no stage; history is in the DB).
+    """
+    out: dict[str, object] = {}
+    try:
+        if "SOC" in fields:
+            out["soc_pct"] = int(fields["SOC"]) / 10  # per mille
+        if "V" in fields:
+            out["voltage_v"] = int(fields["V"]) / 1000
+        if "I" in fields:
+            out["current_a"] = int(fields["I"]) / 1000  # positive = charging
+        if "P" in fields:
+            out["power_w"] = int(fields["P"])
+        if "TTG" in fields:
+            minutes = int(fields["TTG"])
+            out["time_to_go_s"] = None if minutes < 0 else min(minutes * 60, MAX_TIME_TO_GO_S)
+        if "T" in fields:
+            out["temperature_c"] = None if fields["T"].strip() == "---" else int(fields["T"])
+    except ValueError:
+        return {}  # a field we cannot read means we do not trust the block
+    return out

@@ -56,5 +56,5 @@ def _parse_block(block: bytes) -> dict[str, str]:
     for line in body.decode("ascii", errors="replace").split("\r\n"):
         key, sep, value = line.partition("\t")
         if sep:
-            fields[key] = value
+            fields[key] = value.rstrip("\r")  # the last line keeps its CR (CRLF precedes Checksum)
     return fields

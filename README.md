@@ -30,6 +30,25 @@ not a primary source (`"verified": false`).
 
 Frames with a bad checksum are dropped; HEX messages interleaved with text blocks are ignored.
 
+### SmartShunt: `renewvan/battery/<id>/<property>`
+
+`<id>` is the lowercased `SER#`; the SmartShunt sends none, so it is the by-id interface tail of its
+port (`...-if02-port0` -> `if02`). That id depends on the cable staying in the same adapter port.
+Its alternating live and history (`H1..H18`) blocks are merged by key; only the fields below are
+published.
+
+| Property        | Source                                                  |
+| --------------- | ------------------------------------------------------- |
+| `soc_pct`       | `SOC` (per mille / 10)                                  |
+| `voltage_v`     | `V` (mV)                                                |
+| `current_a`     | `I` (mA, + = charging)                                  |
+| `power_w`       | `P` (W)                                                 |
+| `time_to_go_s`  | `TTG` (min x 60, capped at 864000 like Venus); `-1` (infinite) leaves it absent, clearing an earlier value |
+| `temperature_c` | `T`; `---` (no probe) leaves it absent                  |
+
+Deliberately not published: `charge_state`, `capacity_ah`, `remaining_ah`.
+`[device.if02]` (or `[device.<serial>]`) in `config.ini` accepts `name = ...`.
+
 ## Wiring
 
 One VE.Direct USB cable per device, 19200 8N1. Set `[device] port` (default `/dev/ttyUSB0`) in
