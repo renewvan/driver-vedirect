@@ -163,3 +163,20 @@ def test_a_block_whose_fields_all_fail_to_parse_does_not_keep_old_values_live():
     driver.tick()
 
     assert "power_w" not in publisher.instance(BASE)
+
+
+def test_history_blocks_are_merged_per_port_and_dropped_with_the_port():
+    publisher = FakePublisher()
+    driver = Driver(publisher, make_config(), clock=FakeClock())
+    other = BY_ID.replace("-if02-", "-if05-")
+    history = block([("P", "999")])  # a PID-less block carrying a value a live block lacks
+    no_power = block([(k, v) for k, v in [("PID", "0xC035"), ("V", "13323")]])
+
+    driver.poll(NamedPort(history, name=other), key=other)
+    driver.poll(NamedPort(no_power), key=BY_ID)
+    assert "power_w" not in publisher.instance(BASE)  # port if05's history is not if02's
+
+    driver.poll(NamedPort(history, name=BY_ID), key=BY_ID)
+    driver.forget_port(BY_ID)
+    driver.poll(NamedPort(no_power), key=BY_ID)
+    assert "power_w" not in publisher.instance(BASE)

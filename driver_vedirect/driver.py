@@ -55,7 +55,7 @@ class Driver:
         self._warned_ports: set[str | int] = set()
         self._noted_unverified: set[str] = set()
         self._last_err: dict[str, str] = {}
-        self._merged: dict[str, str] = {}  # PID-less (shunt history) blocks, merged by key
+        self._merged: dict[str | int, dict[str, str]] = {}  # per port: PID-less (history) blocks
         self._reported_bad = 0
         self._closed_bad = 0
         self._last_bad_report = float("-inf")
@@ -89,6 +89,8 @@ class Driver:
         parser = self._parsers.pop(key, None)
         if parser is not None:
             self._closed_bad += parser.bad_frames
+        self._merged.pop(key, None)
+        self._warned_ports.discard(key)
 
     def _clear_stale(self) -> None:
         """Entity-generic: empty retained payloads for the live props of a silent device."""
@@ -113,7 +115,7 @@ class Driver:
         # The shunt alternates a live block (PID) and an H1..H18 history block (no PID); the
         # history is folded in by key so neither block overwrites the other.
         if "PID" not in fields:
-            self._merged.update(fields)
+            self._merged.setdefault(port_key, {}).update(fields)
             return
         pid = fields.get("PID", "")
         device = pids.lookup(pid)
@@ -133,7 +135,7 @@ class Driver:
             logger.info("First sight of unverified VE.Direct PID %s (%s)", pid, device["model"])
         entity = device["entity"]
         if entity == "battery":
-            fields = {**self._merged, **fields}
+            fields = {**self._merged.get(port_key, {}), **fields}
         serial = fields.get("SER#", "").lower()
         if not serial and entity == "battery":  # the SmartShunt: its adapter port names it
             match = _INTERFACE_TAIL.search(port_key if isinstance(port_key, str) else "")
