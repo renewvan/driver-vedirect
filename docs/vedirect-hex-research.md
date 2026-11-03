@@ -14,6 +14,8 @@ Evidence behind [ADR 0002](adr/0002-read-only-text-mode.md). Researched 2026-11-
 | Write calls | None in `driver_vedirect/` (no `.write(`) | grep |
 | Devices | SmartShunt (PID 0xC035), SmartSolar MPPT (0xA056), Orion XS (0xA3F0), Blue Smart AC charger (0xA330, user-modded VE.Direct header) | hub issue #107 |
 
+**Provenance.** The text-mode fields, units and checksum rule come from Victron's published VE.Direct Protocol document and FAQ. The PIDs 0xC035 (SmartShunt) and 0xA330 (Blue Smart) are in no Victron document we found; they were learned by capturing the output of the owner's own devices (hub issue #107) and are used only to classify those devices for interoperability. Nothing was decrypted and no access control was bypassed. The capture files are the only source for those two PIDs.
+
 Not checked: whether the Duppa cable's TX line to each device is actually wired. A text-only capture does not prove TX works.
 
 ## 2. Two protocols on one port
