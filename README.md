@@ -118,16 +118,20 @@ unknown meaning) is ignored.
 
 ## Unverified facts
 
-These came from the capture and inference, not a primary Victron source. Treat them as open
-until checked on the van:
+Checked on the van on 2026-11-03 against VictronConnect (SmartShunt, SmartSolar, Orion XS and
+Blue Smart; readings matched). What is still open is listed below.
 
-- **PIDs `0xC035` (SmartShunt) and `0xA330` (Blue Smart)** appear in no Victron document. They
-  are marked `"verified": false` in `pids.json` and logged at INFO on first sight.
-- **`HC#`** on the Blue Smart: meaning unknown; ignored.
-- **`P` sign convention**: whether the shunt's and Orion XS's `P` is positive when charging, like
-  `I`, is assumed. The dashboard spot-check against the device display should confirm it.
+- **PIDs `0xC035` (SmartShunt) and `0xA330` (Blue Smart)** are confirmed on the van, but they
+  appear in no Victron document. They stay marked `"verified": false` in `pids.json` and are
+  logged at INFO on first sight, because "verified" there means documented by Victron.
+- **`HC#`** on the Blue Smart: meaning unknown; ignored, so nothing depends on it.
+- **`P` sign convention**: confirmed for the shunt (`power_w` is negative while discharging,
+  consistent with `I`). Not observed for the Orion XS, which was off during the check.
 - **Orion XS block cadence**: about one block per 4 s is inferred from the capture, not
-  documented. The 10 s staleness threshold is more than two of these.
+  documented, and not re-observed (the Orion XS was off). The 10 s staleness threshold is more
+  than two of these.
+- **Blue Smart on shore power**: only checked while fed from the inverter, so the battery-side
+  current could not cross-check its 30 A.
 - **`port_globs` default** (see below) is a guess.
 
 ## Configuration
