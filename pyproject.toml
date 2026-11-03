@@ -1,7 +1,7 @@
 [project]
 name = "driver-vedirect"
 version = "0.0.0"  # placeholder, nothing reads it: the git release tag is the only version source
-description = "Reads Victron VE.Direct text mode over USB serial (read-only) and publishes battery, solar and charger to the renewvan MQTT bus"
+description = "Reads Victron VE.Direct over USB serial and publishes battery, solar and charger to the renewvan MQTT bus"
 requires-python = ">=3.11"
 dependencies = [
     "paho-mqtt>=1.6,<2",

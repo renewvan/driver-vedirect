@@ -18,7 +18,8 @@ solar, `DC_IN_V` alternator charger, `BMV` or `SOC`+`CE` battery, `V`+`I`+`CS` A
 Otherwise one WARNING per port names the PID and field names, nothing is published and the
 Driver stays healthy.
 
-Nothing is ever written to a device: no HEX protocol, no control, no Bluetooth. Layout follows
+Nothing is ever written to a device: no HEX protocol, no control, no Bluetooth (why:
+[ADR 0002](docs/adr/0002-read-only-text-mode.md)). Layout follows
 `renewvan/driver-template`: layered `config.default.ini`/`config.ini` (`config.py`), MQTT with
 LWT health and retained Driver info (`publisher.py`), VE.Direct framing (`frames.py`), the PID
 table (`pids.json`, `pids.py`), field mapping (`mapping.py`), by-id discovery and reconnect
