@@ -5,3 +5,4 @@
 /state/
 __pycache__/
 *.pyc
+/graphify-out/
