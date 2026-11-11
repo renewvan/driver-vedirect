@@ -6,3 +6,6 @@
 __pycache__/
 *.pyc
 /graphify-out/
+
+# Local scratch notes; never committed
+.scratch/
