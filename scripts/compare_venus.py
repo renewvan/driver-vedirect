@@ -39,6 +39,7 @@ EXPECTED_GAPS: dict[tuple[str, str], str] = {
     ("battery", "remaining_ah"): "history and fuel gauge come from the database",
     ("solar", "yield_history_wh"): "history comes from the database",
     ("charger", "power_w"): "derived as V x I for the Blue Smart / Orion XS without P",
+    ("charger", "input_voltage_alarm"): "starter-battery alarm decided by driver-vedirect",
 }
 
 # Absolute tolerance per property: the rounding of the coarser shared unit (VE.Direct text

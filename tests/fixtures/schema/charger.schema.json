@@ -33,6 +33,11 @@
       "minimum": 0,
       "description": "Optional: voltage on the charger's input side (alternator/starter battery for a DC-DC charger, mains for an AC charger)."
     },
+    "input_voltage_alarm": {
+      "type": "string",
+      "description": "Optional, alternator (DC-DC) chargers only: the starter-battery alarm on `input_voltage_v`, decided by the publishing driver (not by clients). `low` once the input voltage has stayed below the driver's threshold for its hold time (driver-vedirect: 12.4 V for 120 s, set in its `[starter]` config); `ok` otherwise. Retained and live: cleared with the other live values when the device goes silent.",
+      "enum": ["ok", "low"]
+    },
     "source": {
       "type": "string",
       "description": "Optional: what feeds the charger. `unknown` is the forward-compat fallback.",

@@ -50,6 +50,7 @@ charger (`source` `ac`).
 | `current_a`       | `I` (mA)                                            | live     |
 | `power_w`         | `P` (W) when sent, else derived `V x I` (Blue Smart, and Orion XS without `P`) | live |
 | `input_voltage_v` | `DC_IN_V` (0.01 V), Orion XS only                   | live     |
+| `input_voltage_alarm` | starter-battery alarm on `input_voltage_v`, alternator chargers only (see below) | live |
 | `charge_state`    | `CS`, same table as driver-venus, plus `243` -> `emergency_charge` | live |
 
 **Emergency charge (Orion XS firmware >= 1.15).** Started from VictronConnect, the Orion XS
@@ -79,8 +80,24 @@ published.
 | `time_to_go_s`  | `TTG` (min x 60, capped at 864000 like Venus); `-1` (infinite) leaves it absent, clearing an earlier value |
 | `temperature_c` | `T`; `---` (no probe) leaves it absent                  |
 | `time_since_full_charge_s` | `H9` (s, from the history block merged by key) |
+| `starter_voltage_v` | `VS` (mV): only when the aux input is set to "Starter battery" |
+| `starter_voltage_alarm` | starter-battery alarm on `starter_voltage_v` (see below) |
 
 `charge_state`, `capacity_ah` and `remaining_ah` are deliberately not published.
+
+### Starter-battery alarm
+
+Two devices can see the starter battery: the Orion XS (its input side, `input_voltage_v`) and a
+SmartShunt whose aux input is set to "Starter battery" in VictronConnect (`VS`, published as
+`starter_voltage_v`). For each, the driver publishes an alarm next to the voltage:
+`input_voltage_alarm` on the charger, `starter_voltage_alarm` on the battery, `ok` or `low`.
+
+It turns `low` once the voltage has stayed below `[starter] low_v` (12.4 V, about 75% for a
+lead-acid battery at rest) for `hold_s` (120 s): a cranking dip or one bad reading is shorter. It
+turns back to `ok` as soon as the voltage reaches `clear_v` (12.5 V): the engine running or an
+emergency charge lifts it well above. Between the two it holds, so a battery resting near 12.4 V
+does not flap. Each device keeps its own hold timer. The alarm is a live value: silence clears it
+with the others. `[starter] enabled = false` turns both off.
 
 ### Charge state
 
@@ -160,6 +177,10 @@ Blue Smart; readings matched). What is still open is listed below.
 | `[serial]` `port_globs`            | `usb-Duppa_srl_*, usb-VictronEnergy_*, usb-FTDI_*` | comma-separated `fnmatch` patterns on by-id names |
 | `[serial]` `backoff_min_s`         | `1.0`                             | first retry delay for a port that fails |
 | `[serial]` `backoff_max_s`         | `30.0`                            | the doubling stops here |
+| `[starter]` `enabled`              | `true`                            | publish the starter-battery alarms |
+| `[starter]` `low_v`                | `12.4`                            | alarm once the starter voltage stays below this (V) |
+| `[starter]` `clear_v`              | `12.5`                            | clear once it reaches this (V); must be >= `low_v` |
+| `[starter]` `hold_s`               | `120`                             | how long it must stay below `low_v` first (s) |
 | `[device.<id>]` `name`             |                                   | relabel one instance; `<id>` is the lowercased `SER#` or the interface tail (`if02`), any case |
 | `[device.<id>]` `id`               |                                   | publish that device as `renewvan/<entity>/<this id>/...` instead of its serial / interface tail; one topic segment of `a-z`, `0-9`, `-`, `_`; unique across sections |
 
