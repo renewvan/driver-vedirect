@@ -22,12 +22,11 @@
     },
     "current_a": {
       "type": "number",
-      "description": "Optional: current delivered to the battery. Positive = into the battery."
+      "description": "Optional: current delivered to the battery. Positive = into the battery; negative = drawn from it, as during an `emergency_charge`."
     },
     "power_w": {
       "type": "number",
-      "minimum": 0,
-      "description": "Optional: output power delivered to the battery, in watts."
+      "description": "Optional: output power delivered to the battery, in watts. Same sign as `current_a`: negative while the charger draws from its output battery (`emergency_charge`)."
     },
     "input_voltage_v": {
       "type": "number",
@@ -41,7 +40,7 @@
     },
     "charge_state": {
       "type": "string",
-      "description": "Optional: the charger's own charge stage. `unknown` is the forward-compat fallback for any code not in this enum.",
+      "description": "Optional: the charger's own charge stage. `unknown` is the forward-compat fallback for any code not in this enum. `emergency_charge` is a DC-DC charger running backwards for a few minutes (Victron Orion XS firmware >= 1.15, VE.Direct CS 243): it charges its input (starter) battery from its output (house) battery, so `current_a` and `power_w` are negative.",
       "enum": [
         "off",
         "fault",
@@ -51,6 +50,7 @@
         "storage",
         "equalize",
         "external_control",
+        "emergency_charge",
         "unknown"
       ]
     }

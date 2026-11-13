@@ -50,7 +50,14 @@ charger (`source` `ac`).
 | `current_a`       | `I` (mA)                                            | live     |
 | `power_w`         | `P` (W) when sent, else derived `V x I` (Blue Smart, and Orion XS without `P`) | live |
 | `input_voltage_v` | `DC_IN_V` (0.01 V), Orion XS only                   | live     |
-| `charge_state`    | `CS`, same table as driver-venus                    | live     |
+| `charge_state`    | `CS`, same table as driver-venus, plus `243` -> `emergency_charge` | live |
+
+**Emergency charge (Orion XS firmware >= 1.15).** Started from VictronConnect, the Orion XS
+runs backwards for up to 15 minutes, charging the starter battery (its input) from the house
+battery (its output). It reports `CS 243`, which the driver publishes as `charge_state`
+`emergency_charge`, and negative `I` and `P`, published as they are: `current_a` and `power_w` go
+negative. `DC_IN_I` and `DC_IN_P` stay unmapped: VE.Direct sends them unsigned, so they cannot
+say which way the energy flows (VictronConnect shows them negative during the charge).
 
 `ERR` is logged once per change (a healthy first `0` is not news). `T ---` leaves
 `temperature_c` absent (the charger schema has none). `HC#` is ignored. Frames with a bad
@@ -126,7 +133,12 @@ Blue Smart; readings matched). What is still open is listed below.
   logged at INFO on first sight, because "verified" there means documented by Victron.
 - **`HC#`** on the Blue Smart: meaning unknown; ignored, so nothing depends on it.
 - **`P` sign convention**: confirmed for the shunt (`power_w` is negative while discharging,
-  consistent with `I`). Not observed for the Orion XS, which was off during the check.
+  consistent with `I`). For the Orion XS, observed on 2026-11-13 only during an emergency
+  charge (`I -18400`, `P -238`, matching VictronConnect's -18.4 A / -238 W): negative means
+  drawn from the output battery. Not yet observed while charging forwards.
+- **`CS 243`** (emergency charge): seen on the van's Orion XS 12/12-50A, firmware `115FF`, and
+  reported by others on the Victron Community. Victron's VE.Direct protocol document does not
+  list it.
 - **Orion XS block cadence**: about one block per 4 s is inferred from the capture, not
   documented, and not re-observed (the Orion XS was off). The 10 s staleness threshold is more
   than two of these.

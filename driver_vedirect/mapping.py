@@ -26,6 +26,20 @@ def charge_state(raw: str) -> str:
         return "unknown"
 
 
+# Charger-only `CS` codes, kept out of CHARGE_STATES because the solar schema has no such stage.
+# 243: Orion XS (firmware >= 1.15) emergency charge, started from VictronConnect: for up to 15
+# minutes it charges its input (starter) battery from its output (house) battery, so the output
+# `I` and `P` run negative. Observed on a 12/12-50A; Victron does not document the code.
+CHARGER_STATES: dict[int, str] = {243: "emergency_charge"}
+
+
+def charger_charge_state(raw: str) -> str:
+    try:
+        return CHARGER_STATES.get(int(raw)) or charge_state(raw)
+    except ValueError:
+        return "unknown"
+
+
 def map_solar(fields: dict[str, str]) -> dict[str, object]:
     """SmartSolar MPPT block -> `solar` live properties. Fields that are absent stay absent."""
     out: dict[str, object] = {}
@@ -95,6 +109,8 @@ def map_charger(fields: dict[str, str]) -> dict[str, object]:
 
     `power_w` is `P` when the device sends it, else derived V x I (the Blue Smart sends none).
     `T ---` (no sensor) and `HC#` are not mapped. Fields that are absent stay absent.
+    `current_a` and `power_w` keep the device's sign: negative during an Orion XS emergency charge.
+    `DC_IN_I` / `DC_IN_P` are not mapped: VE.Direct sends them unsigned in either direction.
     """
     out: dict[str, object] = {}
     try:
@@ -109,7 +125,7 @@ def map_charger(fields: dict[str, str]) -> dict[str, object]:
         if "DC_IN_V" in fields:
             out["input_voltage_v"] = int(fields["DC_IN_V"]) / 100  # 0.01 V
         if "CS" in fields:
-            out["charge_state"] = charge_state(fields["CS"])
+            out["charge_state"] = charger_charge_state(fields["CS"])
     except ValueError:
         return {}
     return out
