@@ -104,6 +104,43 @@ def test_orion_xs_without_p_derives_power_from_voltage_times_current():
     assert_valid(charger)
 
 
+def emergency_charge_block() -> bytes:
+    """Captured from an Orion XS 12/12-50A on firmware 1.15 during an emergency charge: it charges
+    its input (starter) battery from its output (house) battery, so output I and P run negative."""
+    return block(
+        PID="0xA3F0",
+        FWE="115FF",
+        **{"SER#": "HQ2538Q7PRE"},
+        V="12930",
+        I="-18400",
+        P="-238",
+        DC_IN_V="1441",
+        DC_IN_I="162",
+        DC_IN_P="233",
+        CS="243",
+        OR="0x00000000",
+        ERR="0",
+    )
+
+
+def test_orion_xs_emergency_charge_is_its_own_state_with_negative_output():
+    charger = play(emergency_charge_block()).instance(ORION_BASE)
+
+    assert charger["charge_state"] == "emergency_charge"
+    assert charger["current_a"] == pytest.approx(-18.4)
+    assert charger["power_w"] == -238
+    assert charger["input_voltage_v"] == pytest.approx(14.41)
+    assert_valid(charger)
+
+
+def test_cs_243_is_not_an_emergency_charge_on_a_solar_controller():
+    stream = block(PID="0xA056", **{"SER#": "HQ2001QURE8"}, V="12960", I="0", PPV="0", CS="243")
+
+    solar = play(stream).instance("renewvan/solar/hq2001qure8")
+
+    assert solar["charge_state"] == "unknown"
+
+
 def test_orion_xs_reported_p_wins_over_derivation():
     stream = block(PID="0xA3F0", **{"SER#": "HQ2538Q7PRE"}, V="13000", I="10000", P="125")
 
