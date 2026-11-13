@@ -99,6 +99,8 @@ def map_battery(fields: dict[str, str]) -> dict[str, object]:
             out["time_to_go_s"] = None if minutes < 0 else min(minutes * 60, MAX_TIME_TO_GO_S)
         if "T" in fields:
             out["temperature_c"] = None if fields["T"].strip() == "---" else int(fields["T"])
+        if "VS" in fields:  # aux input set to "Starter battery"
+            out["starter_voltage_v"] = int(fields["VS"]) / 1000
     except ValueError:
         return {}  # a field we cannot read means we do not trust the block
     return out

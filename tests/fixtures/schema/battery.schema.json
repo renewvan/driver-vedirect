@@ -46,6 +46,16 @@
       "type": "number",
       "description": "Optional: only sources with a temperature probe publish it."
     },
+    "starter_voltage_v": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: voltage of the van's starter battery, measured by this battery's monitor on a second input (a Victron SmartShunt/BMV with its aux input set to \"Starter battery\", VE.Direct `VS`). Absent when the monitor has no such input."
+    },
+    "starter_voltage_alarm": {
+      "type": "string",
+      "description": "Optional, with `starter_voltage_v`: the starter-battery alarm decided by the publishing driver (not by clients). `low` once `starter_voltage_v` has stayed below the driver's threshold for its hold time (driver-vedirect: 12.4 V for 120 s, its `[starter]` config); `ok` otherwise. Same rule as charger `input_voltage_alarm`.",
+      "enum": ["ok", "low"]
+    },
     "temperatures_c": {
       "type": "array",
       "minItems": 1,

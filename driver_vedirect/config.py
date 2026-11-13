@@ -48,10 +48,24 @@ class SerialConfig:
 
 
 @dataclass(frozen=True)
+class StarterConfig:
+    """`[starter]`: the starter-battery alarm on an alternator charger's input voltage.
+
+    Defaults suit a 12 V lead-acid starter battery: 12.4 V at rest is about 75% charged.
+    """
+
+    enabled: bool = True
+    low_v: float = 12.4
+    clear_v: float = 12.5
+    hold_s: float = 120.0
+
+
+@dataclass(frozen=True)
 class AppConfig:
     mqtt: MqttConfig
     device: DeviceConfig
     serial: SerialConfig = field(default_factory=SerialConfig)
+    starter: StarterConfig = field(default_factory=StarterConfig)
     # `[device.<serial>] name = ...`, keyed by lowercased serial: an instance label override.
     device_names: dict[str, str] = field(default_factory=dict)
     # `[device.<lookup>] id = ...`, keyed by lowercased lookup: the topic instance id to publish
@@ -101,6 +115,20 @@ def load_config(
     serial = parser["serial"]
     globs = tuple(g.strip() for g in serial.get("port_globs", "").split(",") if g.strip())
 
+    starter = parser["starter"] if parser.has_section("starter") else {}
+    defaults = StarterConfig()
+    starter_config = StarterConfig(
+        enabled=parser.getboolean("starter", "enabled", fallback=defaults.enabled),
+        low_v=float(starter.get("low_v", defaults.low_v)),
+        clear_v=float(starter.get("clear_v", defaults.clear_v)),
+        hold_s=float(starter.get("hold_s", defaults.hold_s)),
+    )
+    if starter_config.clear_v < starter_config.low_v:
+        raise ValueError(
+            f"[starter] clear_v = {starter_config.clear_v} is below low_v = "
+            f"{starter_config.low_v}; it must be at or above it"
+        )
+
     device_names = {
         name[len("device.") :].lower(): section["name"]
         for name, section in parser.items()
@@ -127,6 +155,7 @@ def load_config(
             backoff_min_s=serial.getfloat("backoff_min_s", 1.0),
             backoff_max_s=serial.getfloat("backoff_max_s", 30.0),
         ),
+        starter=starter_config,
         device_names=device_names,
         device_ids=_read_device_ids(parser),
     )

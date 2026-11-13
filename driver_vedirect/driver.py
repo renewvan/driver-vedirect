@@ -20,6 +20,7 @@ from driver_vedirect.config import AppConfig
 from driver_vedirect.driver_info import build_info_payload
 from driver_vedirect.frames import FrameParser
 from driver_vedirect.publisher import Publisher
+from driver_vedirect.starter import StarterAlarm
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,8 @@ class Driver:
         self._owners: dict[tuple[str, str], str] = {}
         self._refused: set[tuple[str, str, str]] = set()
         self._merged: dict[str | int, dict[str, str]] = {}  # per port: PID-less (history) blocks
+        # (entity, id) -> starter-battery alarm, for each device that reports a starter voltage
+        self._starter: dict[tuple[str, str], StarterAlarm] = {}
         self._reported_bad = 0
         self._closed_bad = 0
         self._last_bad_report = float("-inf")
@@ -184,6 +187,7 @@ class Driver:
         values = mapper(fields)
         if not values:  # nothing readable: the block does not prove the device is alive
             return
+        self._add_starter_alarm(entity, serial, device, values)
         live = self._seen.setdefault((entity, serial), (0.0, set()))[1]
         self._seen[(entity, serial)] = (self._clock(), live)
         for prop, value in values.items():
@@ -194,6 +198,26 @@ class Driver:
                 continue
             self._publish(entity, serial, prop, value)
             live.add(prop)
+
+    def _add_starter_alarm(
+        self, entity: str, device_id: str, device: dict, values: dict[str, object]
+    ) -> None:
+        """The starter-battery alarm next to the voltage it watches: an alternator charger's input
+        side (`input_voltage_alarm`), or a SmartShunt's aux input on the starter battery
+        (`starter_voltage_alarm`). Each device keeps its own hold timer."""
+        if not self._config.starter.enabled:
+            return
+        if entity == "charger" and device.get("source") == "alternator":
+            voltage_prop, alarm_prop = "input_voltage_v", "input_voltage_alarm"
+        elif entity == "battery":
+            voltage_prop, alarm_prop = "starter_voltage_v", "starter_voltage_alarm"
+        else:
+            return
+        voltage = values.get(voltage_prop)
+        if not isinstance(voltage, (int, float)):
+            return
+        alarm = self._starter.setdefault((entity, device_id), StarterAlarm(self._config.starter))
+        values[alarm_prop] = alarm.update(voltage, self._clock())
 
     def _log_err_change(self, serial: str, fields: dict[str, str]) -> None:
         err = fields.get("ERR")
