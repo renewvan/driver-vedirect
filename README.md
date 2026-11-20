@@ -1,7 +1,7 @@
 # driver-vedirect
 
 Reads Victron VE.Direct text mode over USB serial, **read-only**, and publishes `battery`,
-`solar` and `charger` instances to the renewvan MQTT bus, so the hub can read a van's Victron
+`solar` and `charger` instances to the Renewvan MQTT bus, so the hub can read a van's Victron
 devices directly instead of through a Venus OS Pi and `driver-venus`. Driver key `vedirect`.
 
 Supported devices (see `driver_vedirect/pids.json`, one line per device):
